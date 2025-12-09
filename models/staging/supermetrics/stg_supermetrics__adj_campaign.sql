@@ -1,5 +1,3 @@
-
-
 WITH SOURCE AS (
 
     SELECT *
@@ -101,6 +99,26 @@ WITH SOURCE AS (
 
 )
 
+, DEDUPED AS (
+
+    SELECT *
+    FROM AGGREGATED
+    QUALIFY ROW_NUMBER() OVER (
+        PARTITION BY DATE
+                   , PARTNER_ID
+                   , PLATFORM
+                   , CAMPAIGN_ID_NETWORK
+                   , ADGROUP_ID_NETWORK
+                   , AD_ID
+                   , COUNTRY_CODE
+                   , DEVICE_TYPE
+                   , OS_NAME
+                   , STORE_ID
+        ORDER BY COST DESC
+    ) = 1
+
+)
+
 SELECT *
-FROM AGGREGATED
+FROM DEDUPED
 ORDER BY DATE DESC
