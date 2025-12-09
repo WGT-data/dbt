@@ -1,0 +1,38 @@
+version: 2
+
+sources:
+  - name: supermetrics
+    database: SUPERMETRICS
+    schema: DATA_TRANSFERS
+    tables:
+      - name: adj_campaign
+        description: Adjust campaign performance data synced via Supermetrics
+        columns:
+          - name: DATE
+            description: Date of the metrics
+          - name: PARTNER_ID
+            description: Partner ID in Adjust system
+          - name: PARTNER_NAME
+            description: Partner name in Adjust system
+          - name: PLATFORM
+            description: Device OS/platform
+          - name: CAMPAIGN_ID_NETWORK
+            description: Campaign ID from network
+          - name: CAMPAIGN_NETWORK
+            description: Campaign name from network
+          - name: ADGROUP_ID_NETWORK
+            description: Adgroup ID from network
+          - name: ADGROUP_NETWORK
+            description: Adgroup name from network
+          - name: AD_ID
+            description: Creative ID from network
+          - name: AD_NAME
+            description: Creative name from network
+          - name: COST
+            description: Total ad spend
+          - name: INSTALLS
+            description: Total installs
+          - name: CLICKS
+            description: Total clicks
+          - name: IMPRESSIONS
+            description: Total impressions
