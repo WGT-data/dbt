@@ -3,7 +3,9 @@ WITH IOS_INSTALLS AS (
          , 'iOS' AS PLATFORM
          , NETWORK_NAME
          , CAMPAIGN_NAME
+         , REGEXP_SUBSTR(CAMPAIGN_NAME, '\\(([0-9]+)\\)$', 1, 1, 'e') AS CAMPAIGN_ID
          , ADGROUP_NAME
+         , REGEXP_SUBSTR(ADGROUP_NAME, '\\(([0-9]+)\\)$', 1, 1, 'e') AS ADGROUP_ID
          , CREATIVE_NAME
          , TRACKER_NAME
          , COUNTRY
@@ -19,7 +21,9 @@ WITH IOS_INSTALLS AS (
          , 'Android' AS PLATFORM
          , NETWORK_NAME
          , CAMPAIGN_NAME
+         , REGEXP_SUBSTR(CAMPAIGN_NAME, '\\(([0-9]+)\\)$', 1, 1, 'e') AS CAMPAIGN_ID
          , ADGROUP_NAME
+         , REGEXP_SUBSTR(ADGROUP_NAME, '\\(([0-9]+)\\)$', 1, 1, 'e') AS ADGROUP_ID
          , CREATIVE_NAME
          , NULL AS TRACKER_NAME
          , NULL AS COUNTRY
