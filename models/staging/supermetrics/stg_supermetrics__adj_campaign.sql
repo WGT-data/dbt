@@ -1,16 +1,9 @@
-{{ config(
-    materialized='incremental',
-    unique_key=['DATE', 'PARTNER_ID', 'PLATFORM', 'CAMPAIGN_ID_NETWORK', 'ADGROUP_ID_NETWORK', 'AD_ID'],
-    incremental_strategy='merge'
-) }}
+
 
 WITH SOURCE AS (
 
     SELECT *
     FROM {{ source('supermetrics', 'adj_campaign') }}
-    {% if is_incremental() %}
-    WHERE DATE >= (SELECT MAX(DATE) - INTERVAL '30 DAYS' FROM {{ this }})
-    {% endif %}
 
 )
 
