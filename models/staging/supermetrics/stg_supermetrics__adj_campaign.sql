@@ -30,7 +30,7 @@ WITH SOURCE AS (
          , STORE_ID
          , STORE_TYPE
          , REGION
-         , SUM(COST) AS COST
+         , SUM(NETWORK_COST) AS COST
          , SUM(CLICKS) AS CLICKS
          , SUM(PAID_CLICKS) AS PAID_CLICKS
          , SUM(IMPRESSIONS) AS IMPRESSIONS
