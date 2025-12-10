@@ -10,7 +10,11 @@ WITH SOURCE AS (
     SELECT DATE
          , PARTNER_ID
          , PARTNER_NAME
-         , PLATFORM
+         , CASE 
+             WHEN LOWER(OS_NAME) = 'ios' THEN 'iOS'
+             WHEN LOWER(OS_NAME) = 'android' THEN 'Android'
+             ELSE OS_NAME
+           END AS PLATFORM
          , CAMPAIGN_ID_NETWORK
          , CAMPAIGN_NETWORK
          , ADGROUP_ID_NETWORK
@@ -80,7 +84,11 @@ WITH SOURCE AS (
     GROUP BY DATE
          , PARTNER_ID
          , PARTNER_NAME
-         , PLATFORM
+         , CASE 
+             WHEN LOWER(OS_NAME) = 'ios' THEN 'iOS'
+             WHEN LOWER(OS_NAME) = 'android' THEN 'Android'
+             ELSE OS_NAME
+           END
          , CAMPAIGN_ID_NETWORK
          , CAMPAIGN_NETWORK
          , ADGROUP_ID_NETWORK
