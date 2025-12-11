@@ -4,7 +4,31 @@ sources:
   - name: adjust
     description: Adjust mobile attribution data
     database: ADJUST_S3
-    schema: DATA
+    schema: PROD_DATA
     tables:
       - name: IOS_ACTIVITY_INSTALL
         description: iOS install events with attribution data
+      - name: IOS_ACTIVITY_SESSION
+        description: iOS session events
+      - name: IOS_ACTIVITY_EVENT
+        description: iOS in-app events
+      - name: IOS_ACTIVITY_CLICK
+        description: iOS click events
+      - name: IOS_ACTIVITY_IMPRESSION
+        description: iOS impression events
+      - name: IOS_ACTIVITY_REATTRIBUTION
+        description: iOS reattribution events
+      - name: IOS_ACTIVITY_SK_INSTALL
+        description: iOS SKAdNetwork install events
+      - name: ANDROID_ACTIVITY_INSTALL
+        description: Android install events with attribution data
+      - name: ANDROID_ACTIVITY_SESSION
+        description: Android session events
+      - name: ANDROID_ACTIVITY_EVENT
+        description: Android in-app events
+      - name: ANDROID_ACTIVITY_CLICK
+        description: Android click events
+      - name: ANDROID_ACTIVITY_IMPRESSION
+        description: Android impression events
+      - name: ANDROID_ACTIVITY_REATTRIBUTION
+        description: Android reattribution events
