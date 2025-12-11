@@ -34,11 +34,13 @@ WITH REVENUE_USERS AS (
 )
 
 -- Normalize device IDs to match Adjust format:
--- iOS: uppercase UUID (matches as-is)
--- Android: Amplitude appends 'R' suffix which must be stripped
-SELECT IFF(PLATFORM = 'Android' AND RIGHT(DEVICE_ID, 1) = 'R'
-          , LEFT(DEVICE_ID, LENGTH(DEVICE_ID) - 1)
-          , DEVICE_ID
+-- iOS: uppercase UUID to match Adjust IDFV
+-- Android: strip trailing 'R' suffix that Amplitude appends (no match possible, but cleaner data)
+SELECT UPPER(
+           IFF(PLATFORM = 'Android' AND RIGHT(DEVICE_ID, 1) = 'R'
+              , LEFT(DEVICE_ID, LENGTH(DEVICE_ID) - 1)
+              , DEVICE_ID
+           )
        ) AS DEVICE_ID_UUID
      , USER_ID AS USER_ID_INTEGER
      , PLATFORM
