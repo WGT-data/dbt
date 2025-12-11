@@ -33,7 +33,13 @@ WITH REVENUE_USERS AS (
     FROM DEVICE_USER_ACTIVITY
 )
 
-SELECT DEVICE_ID AS DEVICE_ID_UUID
+-- Normalize device IDs to match Adjust format:
+-- iOS: uppercase UUID (matches as-is)
+-- Android: Amplitude appends 'R' suffix which must be stripped
+SELECT IFF(PLATFORM = 'Android' AND RIGHT(DEVICE_ID, 1) = 'R'
+          , LEFT(DEVICE_ID, LENGTH(DEVICE_ID) - 1)
+          , DEVICE_ID
+       ) AS DEVICE_ID_UUID
      , USER_ID AS USER_ID_INTEGER
      , PLATFORM
 FROM RANKED_USERS
