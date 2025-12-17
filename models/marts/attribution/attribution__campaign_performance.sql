@@ -34,6 +34,34 @@ WITH NETWORK_MAPPING AS (
          , A.INSTALL_DATE
 )
 
+-- Calculate install share per campaign_name within each partner/campaign_id/platform/date group
+-- This prevents spend duplication when multiple campaign_names share the same campaign_id
+, ATTRIBUTION_WITH_SHARE AS (
+    SELECT *
+         , SUM(INSTALLS) OVER (
+             PARTITION BY PARTNER_ID
+                        , CAMPAIGN_ID
+                        , PLATFORM
+                        , INSTALL_DATE
+           ) AS CAMPAIGN_TOTAL_INSTALLS
+         , CASE 
+             WHEN SUM(INSTALLS) OVER (
+                 PARTITION BY PARTNER_ID
+                            , CAMPAIGN_ID
+                            , PLATFORM
+                            , INSTALL_DATE
+             ) > 0 
+             THEN INSTALLS::FLOAT / SUM(INSTALLS) OVER (
+                 PARTITION BY PARTNER_ID
+                            , CAMPAIGN_ID
+                            , PLATFORM
+                            , INSTALL_DATE
+             )
+             ELSE 0
+           END AS INSTALL_SHARE
+    FROM ATTRIBUTION
+)
+
 , SPEND AS (
     SELECT PARTNER_ID
          , PARTNER_NAME AS NETWORK_NAME
@@ -61,10 +89,11 @@ WITH NETWORK_MAPPING AS (
          , COALESCE(A.CAMPAIGN_ID, S.CAMPAIGN_ID) AS CAMPAIGN_ID
          , COALESCE(A.PLATFORM, S.PLATFORM) AS PLATFORM
          , COALESCE(A.INSTALL_DATE, S.SPEND_DATE) AS DATE
-         , COALESCE(S.COST, 0) AS COST
-         , COALESCE(S.CLICKS, 0) AS CLICKS
-         , COALESCE(S.IMPRESSIONS, 0) AS IMPRESSIONS
-         , COALESCE(S.SUPERMETRICS_INSTALLS, 0) AS SUPERMETRICS_INSTALLS
+         -- Allocate spend proportionally based on install share
+         , COALESCE(S.COST * A.INSTALL_SHARE, S.COST, 0) AS COST
+         , COALESCE(S.CLICKS * A.INSTALL_SHARE, S.CLICKS, 0) AS CLICKS
+         , COALESCE(S.IMPRESSIONS * A.INSTALL_SHARE, S.IMPRESSIONS, 0) AS IMPRESSIONS
+         , COALESCE(S.SUPERMETRICS_INSTALLS * A.INSTALL_SHARE, S.SUPERMETRICS_INSTALLS, 0) AS SUPERMETRICS_INSTALLS
          , COALESCE(A.INSTALLS, 0) AS ATTRIBUTION_INSTALLS
          , COALESCE(A.MATCHED_DEVICES, 0) AS MATCHED_DEVICES
          , COALESCE(A.PURCHASERS, 0) AS PURCHASERS
@@ -72,8 +101,8 @@ WITH NETWORK_MAPPING AS (
          , COALESCE(A.REVENUE, 0) AS REVENUE
          , COALESCE(A.USERS_LEVELED_UP, 0) AS USERS_LEVELED_UP
          , COALESCE(A.LEVEL_UP_EVENTS, 0) AS LEVEL_UP_EVENTS
-         , COALESCE(A.LEVEL_UP_COINS_REWARDED, 0) AS LEVEL_UP_COINS_REWARDED
-    FROM ATTRIBUTION A
+         , COALESCE(A.LEVEL_UP_COINS_REWARDED) AS LEVEL_UP_COINS_REWARDED
+    FROM ATTRIBUTION_WITH_SHARE A
     FULL OUTER JOIN SPEND S
       ON A.PARTNER_ID = S.PARTNER_ID
       AND A.CAMPAIGN_ID = S.CAMPAIGN_ID
