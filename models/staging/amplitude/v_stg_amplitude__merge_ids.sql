@@ -1,23 +1,20 @@
-WITH REVENUE_USERS AS (
-    SELECT DISTINCT USER_ID
-    FROM {{ ref('v_stg_revenue__events') }}
-)
+-- Device to User mapping for attribution
+-- Maps each device to the FIRST user seen on that device
+-- This ensures install attribution goes to the user who actually installed
 
-, DEVICE_USER_ACTIVITY AS (
+WITH DEVICE_USER_ACTIVITY AS (
     SELECT AE.DEVICE_ID
          , AE.USER_ID
          , AE.PLATFORM
          , MIN(AE.EVENT_TIME) AS FIRST_EVENT_TIME
-         , IFF(RU.USER_ID IS NOT NULL, 1, 0) AS HAS_REVENUE
          , MAX(IFF(AE.EVENT_TYPE = 'NewPlayerCreation_Success', 1, 0)) AS IS_NEW_USER
     FROM {{ source('amplitude', 'EVENTS_726530') }} AE
-    LEFT JOIN REVENUE_USERS RU ON AE.USER_ID = RU.USER_ID
     WHERE AE.DEVICE_ID IS NOT NULL
       AND AE.USER_ID IS NOT NULL
       AND AE.PLATFORM IN ('iOS', 'Android')
       AND TRY_PARSE_JSON(AE.EVENT_PROPERTIES):EventSource::STRING = 'Client'
       AND AE.EVENT_TYPE IN ('Cookie_Existing_Account', 'NewPlayerCreation_Success')
-    GROUP BY AE.DEVICE_ID, AE.USER_ID, AE.PLATFORM, RU.USER_ID
+    GROUP BY AE.DEVICE_ID, AE.USER_ID, AE.PLATFORM
 )
 
 , RANKED_USERS AS (
@@ -27,8 +24,7 @@ WITH REVENUE_USERS AS (
          , FIRST_EVENT_TIME
          , ROW_NUMBER() OVER (
              PARTITION BY DEVICE_ID, PLATFORM 
-             ORDER BY HAS_REVENUE DESC
-                    , IS_NEW_USER DESC
+             ORDER BY IS_NEW_USER DESC
                     , FIRST_EVENT_TIME ASC
            ) AS USER_RANK
     FROM DEVICE_USER_ACTIVITY
@@ -36,7 +32,7 @@ WITH REVENUE_USERS AS (
 
 -- Normalize device IDs to match Adjust format:
 -- iOS: uppercase UUID to match Adjust IDFV
--- Android: strip trailing 'R' suffix that Amplitude appends (no match possible, but cleaner data)
+-- Android: strip trailing 'R' suffix that Amplitude appends
 SELECT UPPER(
            IFF(PLATFORM = 'Android' AND RIGHT(DEVICE_ID, 1) = 'R'
               , LEFT(DEVICE_ID, LENGTH(DEVICE_ID) - 1)
