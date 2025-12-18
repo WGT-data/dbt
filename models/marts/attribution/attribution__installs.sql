@@ -27,6 +27,7 @@ WITH INSTALLS AS (
     FROM {{ ref('int_revenue__user_summary') }}
 )
 
+-- Join installs to device mapping
 , BASE_INSTALLS AS (
     SELECT AI.AD_PARTNER
          , AI.NETWORK_NAME
@@ -35,6 +36,7 @@ WITH INSTALLS AS (
          , AI.ADGROUP_NAME
          , AI.ADGROUP_ID
          , AI.PLATFORM
+         , AI.INSTALL_TIMESTAMP
          , CAST(AI.INSTALL_TIMESTAMP AS DATE) AS INSTALL_DATE
          , AI.DEVICE_ID
          , M.AMPLITUDE_USER_ID
@@ -45,19 +47,19 @@ WITH INSTALLS AS (
 )
 
 -- Identify the FIRST install per user to prevent revenue fan-out
--- Revenue should only be attributed once per user, to their earliest install
+-- A user may have multiple devices, but revenue should only be attributed once
 , BASE_INSTALLS_WITH_RANK AS (
     SELECT *
          , ROW_NUMBER() OVER (
              PARTITION BY AMPLITUDE_USER_ID
-             ORDER BY INSTALL_DATE ASC
+             ORDER BY INSTALL_TIMESTAMP ASC
                     , DEVICE_ID ASC
            ) AS USER_INSTALL_RANK
     FROM BASE_INSTALLS
     WHERE AMPLITUDE_USER_ID IS NOT NULL
 )
 
--- User's first install only - used for revenue attribution
+-- User's first install only - used for revenue and engagement attribution
 , FIRST_USER_INSTALLS AS (
     SELECT AD_PARTNER
          , NETWORK_NAME
