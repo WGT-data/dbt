@@ -44,8 +44,33 @@ WITH INSTALLS AS (
       AND AI.PLATFORM = M.PLATFORM
 )
 
--- Aggregate revenue at USER level first, then join to installs
--- This prevents fan-out when users have multiple devices
+-- Identify the FIRST install per user to prevent revenue fan-out
+-- Revenue should only be attributed once per user, to their earliest install
+, BASE_INSTALLS_WITH_RANK AS (
+    SELECT *
+         , ROW_NUMBER() OVER (
+             PARTITION BY AMPLITUDE_USER_ID
+             ORDER BY INSTALL_DATE ASC
+                    , DEVICE_ID ASC
+           ) AS USER_INSTALL_RANK
+    FROM BASE_INSTALLS
+    WHERE AMPLITUDE_USER_ID IS NOT NULL
+)
+
+-- User's first install only - used for revenue attribution
+, FIRST_USER_INSTALLS AS (
+    SELECT AD_PARTNER
+         , NETWORK_NAME
+         , CAMPAIGN_ID
+         , ADGROUP_ID
+         , PLATFORM
+         , INSTALL_DATE
+         , AMPLITUDE_USER_ID
+    FROM BASE_INSTALLS_WITH_RANK
+    WHERE USER_INSTALL_RANK = 1
+)
+
+-- Aggregate revenue at USER level
 , USER_REVENUE AS (
     SELECT RS.USER_ID
          , RS.PURCHASE_COUNT
@@ -53,30 +78,29 @@ WITH INSTALLS AS (
     FROM REVENUE_SUMMARY RS
 )
 
+-- Join revenue only to FIRST install per user (prevents fan-out)
 , REVENUE_ATTRIBUTED AS (
-    SELECT BI.AD_PARTNER
-         , BI.NETWORK_NAME
-         , BI.CAMPAIGN_ID
-         , BI.ADGROUP_ID
-         , BI.PLATFORM
-         , BI.INSTALL_DATE
-         , COUNT(DISTINCT BI.AMPLITUDE_USER_ID) AS PURCHASERS
+    SELECT FI.AD_PARTNER
+         , FI.NETWORK_NAME
+         , FI.CAMPAIGN_ID
+         , FI.ADGROUP_ID
+         , FI.PLATFORM
+         , FI.INSTALL_DATE
+         , COUNT(DISTINCT FI.AMPLITUDE_USER_ID) AS PURCHASERS
          , SUM(UR.PURCHASE_COUNT) AS PURCHASE_EVENTS
          , SUM(UR.TOTAL_REVENUE) AS REVENUE
-    FROM BASE_INSTALLS BI
+    FROM FIRST_USER_INSTALLS FI
     INNER JOIN USER_REVENUE UR 
-      ON BI.AMPLITUDE_USER_ID = UR.USER_ID
-    WHERE BI.AMPLITUDE_USER_ID IS NOT NULL
-    GROUP BY BI.AD_PARTNER
-         , BI.NETWORK_NAME
-         , BI.CAMPAIGN_ID
-         , BI.ADGROUP_ID
-         , BI.PLATFORM
-         , BI.INSTALL_DATE
+      ON FI.AMPLITUDE_USER_ID = UR.USER_ID
+    GROUP BY FI.AD_PARTNER
+         , FI.NETWORK_NAME
+         , FI.CAMPAIGN_ID
+         , FI.ADGROUP_ID
+         , FI.PLATFORM
+         , FI.INSTALL_DATE
 )
 
--- Aggregate level-up events at USER level first, then join to installs
--- This prevents fan-out when users have multiple devices
+-- Aggregate level-up events at USER level
 , USER_LEVEL_UPS AS (
     SELECT AE.USER_ID
          , COUNT(*) AS LEVEL_UP_EVENTS
@@ -86,26 +110,26 @@ WITH INSTALLS AS (
     GROUP BY AE.USER_ID
 )
 
+-- Join level-ups only to FIRST install per user (prevents fan-out)
 , LEVEL_UP_ATTRIBUTED AS (
-    SELECT BI.AD_PARTNER
-         , BI.NETWORK_NAME
-         , BI.CAMPAIGN_ID
-         , BI.ADGROUP_ID
-         , BI.PLATFORM
-         , BI.INSTALL_DATE
-         , COUNT(DISTINCT BI.AMPLITUDE_USER_ID) AS USERS_LEVELED_UP
+    SELECT FI.AD_PARTNER
+         , FI.NETWORK_NAME
+         , FI.CAMPAIGN_ID
+         , FI.ADGROUP_ID
+         , FI.PLATFORM
+         , FI.INSTALL_DATE
+         , COUNT(DISTINCT FI.AMPLITUDE_USER_ID) AS USERS_LEVELED_UP
          , SUM(UL.LEVEL_UP_EVENTS) AS LEVEL_UP_EVENTS
          , SUM(UL.LEVEL_UP_COINS_REWARDED) AS LEVEL_UP_COINS_REWARDED
-    FROM BASE_INSTALLS BI
+    FROM FIRST_USER_INSTALLS FI
     INNER JOIN USER_LEVEL_UPS UL 
-      ON BI.AMPLITUDE_USER_ID = UL.USER_ID
-    WHERE BI.AMPLITUDE_USER_ID IS NOT NULL
-    GROUP BY BI.AD_PARTNER
-         , BI.NETWORK_NAME
-         , BI.CAMPAIGN_ID
-         , BI.ADGROUP_ID
-         , BI.PLATFORM
-         , BI.INSTALL_DATE
+      ON FI.AMPLITUDE_USER_ID = UL.USER_ID
+    GROUP BY FI.AD_PARTNER
+         , FI.NETWORK_NAME
+         , FI.CAMPAIGN_ID
+         , FI.ADGROUP_ID
+         , FI.PLATFORM
+         , FI.INSTALL_DATE
 )
 
 , INSTALL_SUMMARY AS (
