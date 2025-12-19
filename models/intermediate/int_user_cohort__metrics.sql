@@ -12,7 +12,7 @@
 
 WITH amplitude_events AS (
     SELECT *
-    FROM {{ source('amplitude', 'events') }}
+    FROM {{ source('amplitude', 'EVENTS_726530') }}
 )
 
 -- Get first install per user from device mapping
