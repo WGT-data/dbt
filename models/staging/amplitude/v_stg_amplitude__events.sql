@@ -15,7 +15,8 @@ SELECT USER_ID
      , PLATFORM
      , SERVER_UPLOAD_TIME
 FROM {{ source('amplitude', 'EVENTS_726530') }}
+WHERE SERVER_UPLOAD_TIME >= '2025-01-01'
 {% if is_incremental() %}
     -- 3-day lookback to capture late-arriving events based on server upload time
-    WHERE SERVER_UPLOAD_TIME >= DATEADD(day, -3, (SELECT MAX(SERVER_UPLOAD_TIME) FROM {{ this }}))
+    AND SERVER_UPLOAD_TIME >= DATEADD(day, -3, (SELECT MAX(SERVER_UPLOAD_TIME) FROM {{ this }}))
 {% endif %}
