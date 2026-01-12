@@ -1,7 +1,20 @@
+{{
+    config(
+        materialized='incremental',
+        unique_key=['DATE', 'PARTNER_ID', 'PLATFORM', 'CAMPAIGN_ID_NETWORK', 'ADGROUP_ID_NETWORK', 'AD_ID', 'COUNTRY_CODE', 'DEVICE_TYPE', 'OS_NAME', 'STORE_ID'],
+        incremental_strategy='merge',
+        on_schema_change='append_new_columns'
+    )
+}}
+
 WITH SOURCE AS (
 
     SELECT *
     FROM {{ source('supermetrics', 'adj_campaign') }}
+    {% if is_incremental() %}
+        -- 3-day lookback to capture late-arriving daily spend data
+        WHERE DATE >= DATEADD(day, -3, (SELECT MAX(DATE) FROM {{ this }}))
+    {% endif %}
 
 )
 

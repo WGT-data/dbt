@@ -2,6 +2,15 @@
 -- Maps each device to the FIRST user seen on that device
 -- This ensures install attribution goes to the user who actually installed
 
+{{
+    config(
+        materialized='incremental',
+        unique_key=['DEVICE_ID_UUID', 'USER_ID_INTEGER', 'PLATFORM'],
+        incremental_strategy='merge',
+        on_schema_change='append_new_columns'
+    )
+}}
+
 WITH DEVICE_USER_ACTIVITY AS (
     SELECT AE.DEVICE_ID
          , AE.USER_ID
@@ -14,6 +23,10 @@ WITH DEVICE_USER_ACTIVITY AS (
       AND AE.PLATFORM IN ('iOS', 'Android')
       AND TRY_PARSE_JSON(AE.EVENT_PROPERTIES):EventSource::STRING = 'Client'
       AND AE.EVENT_TYPE IN ('Cookie_Existing_Account', 'NewPlayerCreation_Success')
+    {% if is_incremental() %}
+      -- 7-day lookback to capture new device-user mappings
+      AND AE.SERVER_UPLOAD_TIME >= DATEADD(day, -7, (SELECT MAX(FIRST_SEEN_AT) FROM {{ this }}))
+    {% endif %}
     GROUP BY AE.DEVICE_ID, AE.USER_ID, AE.PLATFORM
 )
 
@@ -23,7 +36,7 @@ WITH DEVICE_USER_ACTIVITY AS (
          , PLATFORM
          , FIRST_EVENT_TIME
          , ROW_NUMBER() OVER (
-             PARTITION BY DEVICE_ID, PLATFORM 
+             PARTITION BY DEVICE_ID, PLATFORM
              ORDER BY IS_NEW_USER DESC
                     , FIRST_EVENT_TIME ASC
            ) AS USER_RANK

@@ -1,11 +1,19 @@
-{{config(materialized = "table")}}
+{{
+    config(
+        materialized='incremental',
+        unique_key=['AD_PARTNER', 'NETWORK_NAME', 'CAMPAIGN_ID', 'ADGROUP_ID', 'PLATFORM', 'INSTALL_DATE'],
+        incremental_strategy='merge',
+        on_schema_change='append_new_columns'
+    )
+}}
 
 
 WITH INSTALLS AS (
     SELECT *
     FROM {{ ref('v_stg_adjust__installs') }}
     {% if is_incremental() %}
-    WHERE INSTALL_TIMESTAMP >= (SELECT MAX(INSTALL_DATE) FROM {{ this }})
+        -- 3-day lookback to capture late-arriving install data
+        WHERE CAST(INSTALL_TIMESTAMP AS DATE) >= DATEADD(day, -3, (SELECT MAX(INSTALL_DATE) FROM {{ this }}))
     {% endif %}
 )
 
@@ -18,7 +26,8 @@ WITH INSTALLS AS (
     SELECT *
     FROM {{ ref('v_stg_amplitude__events') }}
     {% if is_incremental() %}
-    WHERE EVENT_TIME >= (SELECT MAX(INSTALL_DATE) FROM {{ this }})
+        -- 3-day lookback to capture late-arriving event data
+        WHERE CAST(EVENT_TIME AS DATE) >= DATEADD(day, -3, (SELECT MAX(INSTALL_DATE) FROM {{ this }}))
     {% endif %}
 )
 

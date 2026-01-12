@@ -1,3 +1,12 @@
+{{
+    config(
+        materialized='incremental',
+        unique_key=['DATE', 'PARTNER_NAME', 'CAMPAIGN_ID_NETWORK', 'ADGROUP_ID_NETWORK', 'AD_ID', 'COUNTRY', 'OS_NAME', 'APP', 'REGION'],
+        incremental_strategy='merge',
+        on_schema_change='append_new_columns'
+    )
+}}
+
 SELECT DATE
      , PARTNER_NAME
      , CAMPAIGN_ID_NETWORK
@@ -59,6 +68,10 @@ SELECT DATE
      , SUM(C_DATASCAPE_REACHLEVEL_110_REVENUE) AS REACHLEVEL_110_REVENUE
 FROM SUPERMETRICS.DATA_TRANSFERS.ADJ_CAMPAIGN
 WHERE DATE >= '01/01/2025'
+{% if is_incremental() %}
+    -- 3-day lookback to capture late-arriving spend data
+    AND DATE >= DATEADD(day, -3, (SELECT MAX(DATE) FROM {{ this }}))
+{% endif %}
 GROUP BY DATE
      , PARTNER_NAME
      , CAMPAIGN_ID_NETWORK
@@ -67,13 +80,8 @@ GROUP BY DATE
      , ADGROUP_NETWORK
      , AD_ID
      , AD_NAME
-     , COUNTRY_CODE
      , COUNTRY
-     , CURRENCY_CODE
-     , DEVICE_TYPE
      , OS_NAME
      , APP
-     , STORE_ID
-     , STORE_TYPE
      , REGION
- ORDER BY DATE DESC
+ORDER BY DATE DESC

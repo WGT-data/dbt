@@ -1,4 +1,11 @@
-{{config(materialized = "table")}}
+{{
+    config(
+        materialized='incremental',
+        unique_key=['AD_PARTNER', 'CAMPAIGN_ID', 'PLATFORM', 'DATE'],
+        incremental_strategy='merge',
+        on_schema_change='append_new_columns'
+    )
+}}
 
 WITH NETWORK_MAPPING AS (
     SELECT *
@@ -25,6 +32,10 @@ WITH NETWORK_MAPPING AS (
     LEFT JOIN NETWORK_MAPPING NM
       ON A.NETWORK_NAME = NM.ADJUST_NETWORK_NAME
     WHERE A.CAMPAIGN_ID IS NOT NULL
+    {% if is_incremental() %}
+      -- 3-day lookback to capture late-arriving data
+      AND A.INSTALL_DATE >= DATEADD(day, -3, (SELECT MAX(DATE) FROM {{ this }}))
+    {% endif %}
     GROUP BY A.AD_PARTNER
          , NM.SUPERMETRICS_PARTNER_ID::VARCHAR
          , NM.SUPERMETRICS_PARTNER_NAME
@@ -74,6 +85,10 @@ WITH NETWORK_MAPPING AS (
          , SUM(IMPRESSIONS) AS IMPRESSIONS
          , SUM(INSTALLS) AS SUPERMETRICS_INSTALLS
     FROM {{ ref('stg_supermetrics__adj_campaign') }}
+    {% if is_incremental() %}
+        -- 3-day lookback to capture late-arriving spend data
+        WHERE DATE >= DATEADD(day, -3, (SELECT MAX(DATE) FROM {{ this }}))
+    {% endif %}
     GROUP BY PARTNER_ID
          , PARTNER_NAME
          , CAMPAIGN_NETWORK

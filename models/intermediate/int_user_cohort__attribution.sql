@@ -3,8 +3,11 @@
 -- Grain: One row per user_id/platform combination
 
 {{ config(
-    materialized='table',
-    tags=['cohort', 'attribution']
+    materialized='incremental',
+    unique_key=['USER_ID', 'PLATFORM'],
+    incremental_strategy='merge',
+    tags=['cohort', 'attribution'],
+    on_schema_change='append_new_columns'
 ) }}
 
 -- iOS installs with attribution
@@ -110,7 +113,7 @@ WITH ios_installs AS (
         ON a.NETWORK_NAME = nm.ADJUST_NETWORK_NAME
 )
 
-SELECT 
+SELECT
     USER_ID
     , PLATFORM
     , ADJUST_DEVICE_ID
@@ -123,3 +126,7 @@ SELECT
     , INSTALL_TIME
     , INSTALL_DATE
 FROM attributed
+{% if is_incremental() %}
+    -- Only process users with recent installs (7-day lookback)
+    WHERE INSTALL_TIME >= DATEADD(day, -7, (SELECT MAX(INSTALL_TIME) FROM {{ this }}))
+{% endif %}

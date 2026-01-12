@@ -6,13 +6,16 @@
 -- Grain: One row per ad_partner/network/campaign/platform/date
 
 {{ config(
-    materialized='table',
+    materialized='incremental',
+    unique_key=['AD_PARTNER', 'CAMPAIGN_NAME', 'ADGROUP_NAME', 'PLATFORM', 'DATE'],
+    incremental_strategy='merge',
+    on_schema_change='append_new_columns',
     tags=['mart', 'performance']
 ) }}
 
 -- Spend data from Supermetrics (Adjust Network API costs)
 WITH spend_data AS (
-    SELECT 
+    SELECT
         DATE
         , PARTNER_NAME AS AD_PARTNER
         , PARTNER_ID
@@ -27,17 +30,29 @@ WITH spend_data AS (
         , SUM(INSTALLS) AS ADJUST_INSTALLS
     FROM {{ source('supermetrics', 'adj_campaign') }}
     WHERE DATE IS NOT NULL
+    {% if is_incremental() %}
+        -- 3-day lookback for late-arriving spend data
+        AND DATE >= DATEADD(day, -3, (SELECT MAX(DATE) FROM {{ this }}))
+    {% endif %}
     GROUP BY 1, 2, 3, 4, 5, 6, 7, 8
 )
 
--- User attribution data
+-- User attribution data (filtered for incremental)
 , user_attribution AS (
     SELECT * FROM {{ ref('int_user_cohort__attribution') }}
+    {% if is_incremental() %}
+        -- 35-day lookback to capture D30 cohort windows
+        WHERE INSTALL_DATE >= DATEADD(day, -35, (SELECT MAX(DATE) FROM {{ this }}))
+    {% endif %}
 )
 
--- User metrics (revenue + retention)
+-- User metrics (revenue + retention) - filtered to match attribution lookback
 , user_metrics AS (
     SELECT * FROM {{ ref('int_user_cohort__metrics') }}
+    {% if is_incremental() %}
+        -- 35-day lookback to capture D30 cohort windows
+        WHERE INSTALL_DATE >= DATEADD(day, -35, (SELECT MAX(DATE) FROM {{ this }}))
+    {% endif %}
 )
 
 -- Join attribution with metrics
