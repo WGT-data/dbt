@@ -14,6 +14,5 @@ SELECT *
 FROM ADJUST_S3.DATA.ANDROID_EVENTS
 WHERE ACTIVITY_KIND = 'install'
 {% if is_incremental() %}
-    -- 3-day lookback to capture late-arriving data from S3 ingestion
-    AND LOAD_TIMESTAMP >= DATEADD(day, -3, (SELECT MAX(LOAD_TIMESTAMP) FROM {{ this }}))
+WHERE LOAD_TIMESTAMP > IFNULL((SELECT MAX(LOAD_TIMESTAMP) FROM {{ this }} WHERE LOAD_TIMESTAMP > current_timestamp - interval '1 day'), CURRENT_TIMESTAMP - interval '1 hour')
 {% endif %}
