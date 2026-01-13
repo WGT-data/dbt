@@ -16,7 +16,7 @@ models:
       - name: DEVICE_ID
         description: Adjust device identifier (IDFV for iOS, GPS_ADID for Android)
       - name: TOUCHPOINT_TYPE
-        description: "impression" or "click"
+        description: impression or click
       - name: TOUCHPOINT_POSITION
         description: Position in journey from first (1 = first touchpoint)
       - name: TOTAL_TOUCHPOINTS
