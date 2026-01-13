@@ -1,0 +1,61 @@
+version: 2
+
+models:
+  - name: mta__campaign_performance
+    description: |
+      Multi-Touch Attribution Campaign Performance - compares 5 attribution models side-by-side.
+      Use this to understand how different attribution methodologies affect campaign performance metrics.
+
+      Attribution Models:
+      - Last-Touch: 100% credit to last touchpoint before install
+      - First-Touch: 100% credit to first touchpoint in journey
+      - Linear: Equal credit split among all touchpoints (weighted by click vs impression)
+      - Time-Decay: Exponential decay with 3-day half-life (recommended)
+      - Position-Based: 40% first, 40% last, 20% middle
+
+      Grain: One row per AD_PARTNER + CAMPAIGN_ID + PLATFORM + DATE
+    columns:
+      - name: AD_PARTNER
+        description: Standardized partner name (Meta, Google, TikTok, etc.)
+      - name: CAMPAIGN_ID
+        description: Network campaign identifier
+      - name: PLATFORM
+        description: iOS or Android
+      - name: DATE
+        description: Install date
+      - name: COST
+        description: Ad spend from Supermetrics
+      - name: INSTALLS_LAST_TOUCH
+        description: Installs attributed via last-touch model
+      - name: INSTALLS_TIME_DECAY
+        description: Installs attributed via time-decay model (recommended)
+      - name: D7_ROAS_TIME_DECAY
+        description: 7-day ROAS using time-decay attribution
+      - name: D30_ROAS_TIME_DECAY
+        description: 30-day ROAS using time-decay attribution
+      - name: CPI_TIME_DECAY
+        description: Cost per install using time-decay attribution
+
+  - name: mta__network_comparison
+    description: |
+      Network-level summary comparing attribution models.
+      Shows which networks gain or lose credit under different attribution methodologies.
+
+      Key insight columns:
+      - FIRST_TOUCH_VS_LAST_TOUCH_PCT: % difference in credited installs
+        - Positive = network gets MORE credit under first-touch (awareness/prospecting)
+        - Negative = network gets LESS credit under first-touch (retargeting/lower-funnel)
+
+      Grain: One row per AD_PARTNER + PLATFORM + DATE
+    columns:
+      - name: AD_PARTNER
+        description: Standardized partner name
+      - name: FIRST_TOUCH_VS_LAST_TOUCH_PCT
+        description: |
+          Percentage difference between first-touch and last-touch attributed installs.
+          Positive values indicate the network is stronger at awareness/prospecting.
+          Negative values indicate the network is stronger at conversion/retargeting.
+      - name: TIME_DECAY_VS_LAST_TOUCH_PCT
+        description: |
+          Percentage difference between time-decay and last-touch attributed installs.
+          Shows how the recommended model differs from simple last-touch.

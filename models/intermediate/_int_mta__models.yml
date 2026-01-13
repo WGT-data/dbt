@@ -1,0 +1,56 @@
+version: 2
+
+models:
+  - name: int_mta__user_journey
+    description: |
+      Maps all marketing touchpoints (impressions + clicks) to conversions (installs).
+      Foundation table for multi-touch attribution calculations.
+
+      Join Logic:
+      - Touchpoints within 7-day lookback window before install
+      - Touchpoint must be BEFORE install timestamp
+      - Includes position information (first touch, last touch, total touchpoints)
+
+      Grain: One row per device + touchpoint + install combination
+    columns:
+      - name: DEVICE_ID
+        description: Adjust device identifier (IDFV for iOS, GPS_ADID for Android)
+      - name: TOUCHPOINT_TYPE
+        description: "impression" or "click"
+      - name: TOUCHPOINT_POSITION
+        description: Position in journey from first (1 = first touchpoint)
+      - name: TOTAL_TOUCHPOINTS
+        description: Total number of touchpoints in this user's journey
+      - name: IS_FIRST_TOUCH
+        description: 1 if this is the first touchpoint, 0 otherwise
+      - name: IS_LAST_TOUCH
+        description: 1 if this is the last touchpoint before install, 0 otherwise
+      - name: HOURS_TO_INSTALL
+        description: Hours between touchpoint and install
+      - name: DAYS_TO_INSTALL
+        description: Days between touchpoint and install
+
+  - name: int_mta__touchpoint_credit
+    description: |
+      Calculates attribution credit for each touchpoint using multiple methodologies.
+      Each row contains credit scores under all 5 attribution models.
+
+      Attribution Models Calculated:
+      - CREDIT_LAST_TOUCH: 100% to last touchpoint
+      - CREDIT_FIRST_TOUCH: 100% to first touchpoint
+      - CREDIT_LINEAR: Equal split (weighted by type)
+      - CREDIT_TIME_DECAY: Half-life decay (3 days)
+      - CREDIT_POSITION_BASED: 40/40/20 U-shaped
+      - CREDIT_RECOMMENDED: Alias for time-decay
+
+      Grain: One row per device + touchpoint
+    columns:
+      - name: CREDIT_TIME_DECAY
+        description: |
+          Attribution credit using time-decay model (recommended).
+          Uses exponential decay with 3-day half-life.
+          Clicks weighted 2x vs impressions.
+      - name: CREDIT_POSITION_BASED
+        description: |
+          Attribution credit using position-based (U-shaped) model.
+          40% to first touch, 40% to last touch, 20% split among middle touches.
