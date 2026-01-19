@@ -13,11 +13,11 @@
 -- Includes for each model: Installs, Revenue (D7/D30/Total), Retention (D1/D7/D30), Payers
 -- Plus derived metrics: CPI, ROAS, ARPI, ARPPU, Retention Rates, Payer Conversion
 --
--- Grain: One row per AD_PARTNER/CAMPAIGN_NAME/ADGROUP_NAME/PLATFORM/DATE
+-- Grain: One row per AD_PARTNER/CAMPAIGN_NAME/PLATFORM/DATE
 
 {{ config(
     materialized='incremental',
-    unique_key=['AD_PARTNER', 'CAMPAIGN_NAME', 'ADGROUP_NAME', 'PLATFORM', 'DATE'],
+    unique_key=['AD_PARTNER', 'CAMPAIGN_NAME', 'PLATFORM', 'DATE'],
     incremental_strategy='merge',
     on_schema_change='append_new_columns',
     tags=['mart', 'performance', 'mta']
@@ -25,27 +25,24 @@
 
 -- =============================================
 -- SPEND DATA (from Supermetrics/Adjust Network API)
+-- Aggregated to campaign level
 -- =============================================
 WITH spend_data AS (
     SELECT
         DATE
         , PARTNER_NAME AS AD_PARTNER
-        , PARTNER_ID
         , CAMPAIGN_NETWORK AS CAMPAIGN_NAME
-        , CAMPAIGN_ID_NETWORK AS CAMPAIGN_ID
-        , ADGROUP_NETWORK AS ADGROUP_NAME
-        , ADGROUP_ID_NETWORK AS ADGROUP_ID
         , PLATFORM
         , SUM(NETWORK_COST) AS COST
         , SUM(CLICKS) AS CLICKS
         , SUM(IMPRESSIONS) AS IMPRESSIONS
-        , SUM(INSTALLS) AS ADJUST_INSTALLS
+        , SUM(INSTALLS) AS ADJUST_NETWORK_INSTALLS
     FROM {{ source('supermetrics', 'adj_campaign') }}
     WHERE DATE IS NOT NULL
     {% if is_incremental() %}
         AND DATE >= DATEADD(day, -3, (SELECT MAX(DATE) FROM {{ this }}))
     {% endif %}
-    GROUP BY 1, 2, 3, 4, 5, 6, 7, 8
+    GROUP BY 1, 2, 3, 4
 )
 
 -- =============================================
@@ -90,19 +87,17 @@ WITH spend_data AS (
 )
 
 -- =============================================
--- ADJUST METRICS AGGREGATED (baseline)
+-- ADJUST METRICS AGGREGATED (baseline) at Campaign level
 -- =============================================
 , adjust_metrics AS (
     SELECT
         a.INSTALL_DATE AS DATE
         , a.AD_PARTNER
-        , a.NETWORK_NAME
         , a.CAMPAIGN_NAME
-        , a.ADGROUP_NAME
         , a.PLATFORM
 
         -- Adjust attribution counts (raw counts, not fractional)
-        , COUNT(DISTINCT a.USER_ID) AS ADJUST_ATTRIBUTION_INSTALLS
+        , COUNT(DISTINCT a.USER_ID) AS ADJUST_INSTALLS
 
         -- Revenue attributed via Adjust
         , SUM(COALESCE(m.TOTAL_REVENUE, 0)) AS ADJUST_TOTAL_REVENUE
@@ -133,7 +128,7 @@ WITH spend_data AS (
         ON a.USER_ID = m.USER_ID
         AND a.PLATFORM = m.PLATFORM
     WHERE a.INSTALL_DATE IS NOT NULL
-    GROUP BY 1, 2, 3, 4, 5, 6
+    GROUP BY 1, 2, 3, 4
 )
 
 -- =============================================
@@ -144,11 +139,7 @@ WITH spend_data AS (
         tc.DEVICE_ID
         , tc.PLATFORM
         , tc.AD_PARTNER
-        , tc.NETWORK_NAME
         , tc.CAMPAIGN_NAME
-        , tc.CAMPAIGN_ID
-        , tc.ADGROUP_NAME
-        , tc.ADGROUP_ID
         , CAST(tc.INSTALL_TIMESTAMP AS DATE) AS INSTALL_DATE
         , tc.CREDIT_LAST_TOUCH
         , tc.CREDIT_FIRST_TOUCH
@@ -210,15 +201,13 @@ WITH spend_data AS (
 )
 
 -- =============================================
--- MTA METRICS AGGREGATED (all 5 models)
+-- MTA METRICS AGGREGATED (all 5 models) at Campaign level
 -- =============================================
 , mta_metrics AS (
     SELECT
         INSTALL_DATE AS DATE
         , AD_PARTNER
-        , NETWORK_NAME
         , CAMPAIGN_NAME
-        , ADGROUP_NAME
         , PLATFORM
 
         -- =============================================
@@ -311,31 +300,28 @@ WITH spend_data AS (
 
     FROM touchpoints_with_metrics
     WHERE INSTALL_DATE IS NOT NULL
-    GROUP BY 1, 2, 3, 4, 5, 6
+    GROUP BY 1, 2, 3, 4
 )
 
 -- =============================================
 -- COMBINE ALL DATA SOURCES
+-- Join on AD_PARTNER + CAMPAIGN_NAME + PLATFORM + DATE
 -- =============================================
 , combined AS (
     SELECT
         COALESCE(s.DATE, a.DATE, m.DATE) AS DATE
         , COALESCE(s.AD_PARTNER, a.AD_PARTNER, m.AD_PARTNER) AS AD_PARTNER
-        , COALESCE(a.NETWORK_NAME, m.NETWORK_NAME) AS NETWORK_NAME
         , COALESCE(s.CAMPAIGN_NAME, a.CAMPAIGN_NAME, m.CAMPAIGN_NAME) AS CAMPAIGN_NAME
-        , s.CAMPAIGN_ID
-        , COALESCE(s.ADGROUP_NAME, a.ADGROUP_NAME, m.ADGROUP_NAME) AS ADGROUP_NAME
-        , s.ADGROUP_ID
         , COALESCE(s.PLATFORM, a.PLATFORM, m.PLATFORM) AS PLATFORM
 
         -- Spend metrics
         , COALESCE(s.COST, 0) AS COST
         , COALESCE(s.CLICKS, 0) AS CLICKS
         , COALESCE(s.IMPRESSIONS, 0) AS IMPRESSIONS
-        , COALESCE(s.ADJUST_INSTALLS, 0) AS ADJUST_NETWORK_INSTALLS
+        , COALESCE(s.ADJUST_NETWORK_INSTALLS, 0) AS ADJUST_NETWORK_INSTALLS
 
         -- Adjust attribution metrics
-        , COALESCE(a.ADJUST_ATTRIBUTION_INSTALLS, 0) AS ADJUST_INSTALLS
+        , COALESCE(a.ADJUST_INSTALLS, 0) AS ADJUST_INSTALLS
         , COALESCE(a.ADJUST_TOTAL_REVENUE, 0) AS ADJUST_TOTAL_REVENUE
         , COALESCE(a.ADJUST_D7_REVENUE, 0) AS ADJUST_D7_REVENUE
         , COALESCE(a.ADJUST_D30_REVENUE, 0) AS ADJUST_D30_REVENUE
@@ -428,13 +414,11 @@ WITH spend_data AS (
         ON s.DATE = a.DATE
         AND LOWER(s.AD_PARTNER) = LOWER(a.AD_PARTNER)
         AND LOWER(s.CAMPAIGN_NAME) = LOWER(a.CAMPAIGN_NAME)
-        AND LOWER(s.ADGROUP_NAME) = LOWER(a.ADGROUP_NAME)
         AND LOWER(s.PLATFORM) = LOWER(a.PLATFORM)
     FULL OUTER JOIN mta_metrics m
         ON COALESCE(s.DATE, a.DATE) = m.DATE
         AND LOWER(COALESCE(s.AD_PARTNER, a.AD_PARTNER)) = LOWER(m.AD_PARTNER)
         AND LOWER(COALESCE(s.CAMPAIGN_NAME, a.CAMPAIGN_NAME)) = LOWER(m.CAMPAIGN_NAME)
-        AND LOWER(COALESCE(s.ADGROUP_NAME, a.ADGROUP_NAME)) = LOWER(m.ADGROUP_NAME)
         AND LOWER(COALESCE(s.PLATFORM, a.PLATFORM)) = LOWER(m.PLATFORM)
 )
 
@@ -444,11 +428,7 @@ WITH spend_data AS (
 SELECT
     DATE
     , AD_PARTNER
-    , NETWORK_NAME
     , CAMPAIGN_NAME
-    , CAMPAIGN_ID
-    , ADGROUP_NAME
-    , ADGROUP_ID
     , PLATFORM
 
     -- =============================================

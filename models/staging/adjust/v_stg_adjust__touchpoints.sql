@@ -38,7 +38,10 @@ WITH ios_impressions AS (
       AND CREATED_AT IS NOT NULL
       AND CREATED_AT >= 1704067200  -- 2024-01-01 in epoch
     {% if is_incremental() %}
-      AND LOAD_TIMESTAMP >= DATEADD(day, -3, (SELECT MAX(LOAD_TIMESTAMP) FROM {{ this }} WHERE PLATFORM = 'iOS' AND TOUCHPOINT_TYPE = 'impression'))
+      AND LOAD_TIMESTAMP > IFNULL(
+          (SELECT MAX(LOAD_TIMESTAMP) FROM {{ this }} WHERE PLATFORM = 'iOS' AND TOUCHPOINT_TYPE = 'impression' AND LOAD_TIMESTAMP > CURRENT_TIMESTAMP - INTERVAL '1 day'),
+          CURRENT_TIMESTAMP - INTERVAL '1 hour'
+      )
     {% endif %}
 )
 
@@ -64,7 +67,10 @@ WITH ios_impressions AS (
       AND CREATED_AT IS NOT NULL
       AND CREATED_AT >= 1704067200  -- 2024-01-01 in epoch
     {% if is_incremental() %}
-      AND LOAD_TIMESTAMP >= DATEADD(day, -3, (SELECT MAX(LOAD_TIMESTAMP) FROM {{ this }} WHERE PLATFORM = 'iOS' AND TOUCHPOINT_TYPE = 'click'))
+      AND LOAD_TIMESTAMP > IFNULL(
+          (SELECT MAX(LOAD_TIMESTAMP) FROM {{ this }} WHERE PLATFORM = 'iOS' AND TOUCHPOINT_TYPE = 'click' AND LOAD_TIMESTAMP > CURRENT_TIMESTAMP - INTERVAL '1 day'),
+          CURRENT_TIMESTAMP - INTERVAL '1 hour'
+      )
     {% endif %}
 )
 
@@ -90,7 +96,10 @@ WITH ios_impressions AS (
       AND CREATED_AT IS NOT NULL
       AND CREATED_AT >= 1704067200  -- 2024-01-01 in epoch
     {% if is_incremental() %}
-      AND LOAD_TIMESTAMP >= DATEADD(day, -3, (SELECT MAX(LOAD_TIMESTAMP) FROM {{ this }} WHERE PLATFORM = 'Android' AND TOUCHPOINT_TYPE = 'impression'))
+      AND LOAD_TIMESTAMP > IFNULL(
+          (SELECT MAX(LOAD_TIMESTAMP) FROM {{ this }} WHERE PLATFORM = 'Android' AND TOUCHPOINT_TYPE = 'impression' AND LOAD_TIMESTAMP > CURRENT_TIMESTAMP - INTERVAL '1 day'),
+          CURRENT_TIMESTAMP - INTERVAL '1 hour'
+      )
     {% endif %}
 )
 
@@ -115,7 +124,10 @@ WITH ios_impressions AS (
       AND CREATED_AT IS NOT NULL
       AND CREATED_AT >= 1704067200  -- 2024-01-01 in epoch
     {% if is_incremental() %}
-      AND LOAD_TIMESTAMP >= DATEADD(day, -3, (SELECT MAX(LOAD_TIMESTAMP) FROM {{ this }} WHERE PLATFORM = 'Android' AND TOUCHPOINT_TYPE = 'click'))
+      AND LOAD_TIMESTAMP > IFNULL(
+          (SELECT MAX(LOAD_TIMESTAMP) FROM {{ this }} WHERE PLATFORM = 'Android' AND TOUCHPOINT_TYPE = 'click' AND LOAD_TIMESTAMP > CURRENT_TIMESTAMP - INTERVAL '1 day'),
+          CURRENT_TIMESTAMP - INTERVAL '1 hour'
+      )
     {% endif %}
 )
 
