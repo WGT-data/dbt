@@ -1,5 +1,12 @@
+-- v_stg_adjust__installs.sql
+-- Unified view of all app installs from Adjust
+-- Grain: One row per device (first install only)
+--
+-- NOTE: IP_ADDRESS included for iOS MTA matching since iOS touchpoints lack device IDs
+
 WITH IOS_INSTALLS AS (
     SELECT IDFV AS DEVICE_ID
+         , IDFA  -- For deterministic matching when user consented to tracking
          , 'iOS' AS PLATFORM
          , NETWORK_NAME
          , CAMPAIGN_NAME
@@ -9,15 +16,18 @@ WITH IOS_INSTALLS AS (
          , CREATIVE_NAME
          , TRACKER_NAME
          , COUNTRY
+         , IP_ADDRESS
          , TO_TIMESTAMP(INSTALLED_AT) AS INSTALL_TIMESTAMP
+         , INSTALLED_AT AS INSTALL_EPOCH
          , TO_TIMESTAMP(CREATED_AT) AS CREATED_TIMESTAMP
-    FROM ADJUST_S3.PROD_DATA.IOS_ACTIVITY_INSTALL
+    FROM {{ source('adjust', 'IOS_ACTIVITY_INSTALL') }}
     WHERE IDFV IS NOT NULL
       AND INSTALLED_AT IS NOT NULL
 )
 
 , ANDROID_INSTALLS AS (
     SELECT GPS_ADID AS DEVICE_ID
+         , NULL AS IDFA  -- Android doesn't have IDFA
          , 'Android' AS PLATFORM
          , NETWORK_NAME
          , CAMPAIGN_NAME
@@ -27,9 +37,11 @@ WITH IOS_INSTALLS AS (
          , CREATIVE_NAME
          , NULL AS TRACKER_NAME
          , NULL AS COUNTRY
+         , IP_ADDRESS
          , TO_TIMESTAMP(INSTALLED_AT) AS INSTALL_TIMESTAMP
+         , INSTALLED_AT AS INSTALL_EPOCH
          , TO_TIMESTAMP(CREATED_AT) AS CREATED_TIMESTAMP
-    FROM ADJUST_S3.PROD_DATA.ANDROID_ACTIVITY_INSTALL
+    FROM {{ source('adjust', 'ANDROID_ACTIVITY_INSTALL') }}
     WHERE GPS_ADID IS NOT NULL
       AND INSTALLED_AT IS NOT NULL
 )
@@ -47,6 +59,7 @@ WITH IOS_INSTALLS AS (
 )
 
 SELECT DEVICE_ID
+     , IDFA
      , PLATFORM
      , NETWORK_NAME
      , CASE
@@ -75,6 +88,8 @@ SELECT DEVICE_ID
      , CREATIVE_NAME
      , TRACKER_NAME
      , COUNTRY
+     , IP_ADDRESS
      , INSTALL_TIMESTAMP
+     , INSTALL_EPOCH
      , CREATED_TIMESTAMP
 FROM DEDUPED

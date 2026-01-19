@@ -6,12 +6,12 @@
 -- 4. Time-Decay: More credit to touchpoints closer to conversion (half-life = 3 days)
 -- 5. Position-Based (U-Shaped): 40% first, 40% last, 20% middle
 --
--- Grain: One row per device + touchpoint (with credit scores)
+-- Grain: One row per device + touchpoint + install combination (with credit scores)
 
 {{
     config(
         materialized='incremental',
-        unique_key=['DEVICE_ID', 'PLATFORM', 'TOUCHPOINT_TIMESTAMP', 'TOUCHPOINT_TYPE', 'NETWORK_NAME'],
+        unique_key=['DEVICE_ID', 'PLATFORM', 'TOUCHPOINT_TIMESTAMP', 'TOUCHPOINT_TYPE', 'NETWORK_NAME', 'INSTALL_TIMESTAMP'],
         incremental_strategy='merge',
         on_schema_change='append_new_columns',
         tags=['mta', 'attribution']
