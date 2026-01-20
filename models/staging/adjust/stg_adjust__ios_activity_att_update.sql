@@ -5,7 +5,6 @@
         schema='DATA',
         alias='IOS_ACTIVITY_ATT_UPDATE',
         incremental_strategy='append',
-        incremental_predicates=["DATE(DBT_INTERNAL_DEST.LOAD_TIMESTAMP) >= CURRENT_DATE - 1"],
         on_schema_change='append_new_columns'
     )
 }}
