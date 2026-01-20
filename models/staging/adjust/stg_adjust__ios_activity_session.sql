@@ -2,7 +2,7 @@
     config(
         materialized='incremental',
         database='ADJUST_S3',
-        schema='DATA',
+        schema='PROD_DATA',
         alias='IOS_ACTIVITY_SESSION',
         incremental_strategy='append',
         on_schema_change='append_new_columns'
