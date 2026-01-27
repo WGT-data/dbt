@@ -151,6 +151,7 @@ WITH touchpoint_credits AS (
 -- Join with spend data
 -- Note: Join via PARTNER_ID to SUPERMETRICS_PARTNER_ID for accurate matching
 -- Filter to only numeric campaign IDs (excludes 'unknown', search terms, etc.)
+-- Cast SUPERMETRICS_PARTNER_ID to VARCHAR to avoid implicit numeric cast of 'unknown' PARTNER_ID
 , spend AS (
     SELECT COALESCE(nm.SUPERMETRICS_PARTNER_NAME, s.PARTNER_NAME) AS AD_PARTNER
          , s.CAMPAIGN_ID_NETWORK AS CAMPAIGN_ID
@@ -161,7 +162,7 @@ WITH touchpoint_credits AS (
          , SUM(s.IMPRESSIONS) AS IMPRESSIONS
     FROM {{ ref('stg_supermetrics__adj_campaign') }} s
     LEFT JOIN network_mapping_deduped nm
-        ON s.PARTNER_ID = nm.SUPERMETRICS_PARTNER_ID
+        ON s.PARTNER_ID = CAST(nm.SUPERMETRICS_PARTNER_ID AS VARCHAR)
     WHERE TRY_TO_NUMBER(s.CAMPAIGN_ID_NETWORK) IS NOT NULL
     {% if is_incremental() %}
         AND s.DATE >= DATEADD(day, -7, (SELECT MAX(DATE) FROM {{ this }}))
