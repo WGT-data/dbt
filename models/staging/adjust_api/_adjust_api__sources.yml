@@ -1,0 +1,69 @@
+version: 2
+
+sources:
+  - name: adjust_api
+    description: "Adjust campaign data loaded via the Reports Service API"
+    database: WGT
+    schema: ADJUST_API
+    tables:
+      - name: adj_campaign_api
+        description: "Campaign-level metrics from Adjust API, structured to match Supermetrics ADJ_CAMPAIGN"
+        columns:
+          - name: date
+            description: "Date of the metrics"
+          - name: app
+            description: "App name (1 - iOS Golf Mobile or 2 - Googleplay Golf Mobile)"
+          - name: os_name
+            description: "Operating system (ios or android)"
+          - name: country_code
+            description: "2-letter ISO country code"
+          - name: partner_id
+            description: "Adjust partner ID"
+          - name: partner_name
+            description: "Ad network partner name"
+          - name: campaign_id_network
+            description: "Campaign ID from the ad network"
+          - name: campaign_network
+            description: "Campaign name from the ad network"
+          - name: adgroup_id_network
+            description: "Ad group ID from the ad network"
+          - name: adgroup_network
+            description: "Ad group name from the ad network"
+          - name: ad_id
+            description: "Creative/ad ID"
+          - name: ad_name
+            description: "Creative/ad name"
+          - name: installs
+            description: "Number of app installs"
+          - name: clicks
+            description: "Number of ad clicks"
+          - name: impressions
+            description: "Number of ad impressions"
+          - name: cost
+            description: "Total ad spend"
+          - name: sessions
+            description: "Total sessions"
+          - name: reattributions
+            description: "Number of reattributions"
+
+      - name: api_load_log
+        description: "Log of API data loads for monitoring"
+        columns:
+          - name: load_date
+            description: "Date for which data was loaded"
+          - name: app_name
+            description: "App that was loaded"
+          - name: status
+            description: "SUCCESS or ERROR"
+          - name: rows_loaded
+            description: "Number of rows loaded"
+          - name: error_message
+            description: "Error details if failed"
+
+  - name: supermetrics
+    description: "Supermetrics data transfers (legacy source)"
+    database: SUPERMETRICS
+    schema: DATA_TRANSFERS
+    tables:
+      - name: adj_campaign
+        description: "Legacy Supermetrics Adjust campaign data"

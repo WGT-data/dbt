@@ -1,0 +1,59 @@
+version: 2
+
+models:
+  - name: int_skan__aggregate_attribution
+    description: |
+      Aggregate-level attribution from iOS SKAdNetwork postbacks.
+
+      IMPORTANT: SKAN data has NO device identifiers. These installs CANNOT be joined
+      to individual users. This model provides aggregate install counts and conversion
+      value distributions for iOS users who did not consent to tracking.
+
+      There is potential overlap with device-level installs (int_user_cohort__attribution)
+      for users who consented to tracking. Deduplication logic should be applied before
+      combining these models for total install counts.
+
+      Grain: One row per partner/campaign/install_date
+    columns:
+      - name: SKAN_PARTNER
+        description: Original partner name from SKAN postback
+      - name: AD_PARTNER
+        description: Standardized partner name (Meta, Google, TikTok, etc.)
+      - name: CAMPAIGN_NAME
+        description: Campaign name from SKAN postback
+      - name: INSTALL_DATE
+        description: Date of install (derived from SK_TS timestamp)
+      - name: INSTALL_COUNT
+        description: Total unique installs (by SK_TRANSACTION_ID)
+      - name: NEW_INSTALL_COUNT
+        description: New installs (SK_REDOWNLOAD = 0)
+      - name: REDOWNLOAD_COUNT
+        description: Redownloads (SK_REDOWNLOAD = 1)
+      - name: AVG_CONVERSION_VALUE
+        description: Average conversion value (0-63 scale)
+      - name: MEDIAN_CONVERSION_VALUE
+        description: Median conversion value
+      - name: MAX_CONVERSION_VALUE
+        description: Maximum conversion value observed
+      - name: INSTALLS_WITH_CV
+        description: Count of installs that have a conversion value
+      - name: CV_BUCKET_0
+        description: Installs with conversion value = 0
+      - name: CV_BUCKET_1_10
+        description: Installs with conversion value 1-10
+      - name: CV_BUCKET_11_20
+        description: Installs with conversion value 11-20
+      - name: CV_BUCKET_21_40
+        description: Installs with conversion value 21-40
+      - name: CV_BUCKET_41_63
+        description: Installs with conversion value 41-63
+      - name: STOREKIT_RENDERED_COUNT
+        description: Installs where ad was rendered via StoreKit (fidelity_type = 1)
+      - name: VIEW_THROUGH_COUNT
+        description: View-through installs (fidelity_type = 0)
+      - name: WINNING_POSTBACKS
+        description: Postbacks where this network won attribution (did_win = 1)
+      - name: SKAN_V3_COUNT
+        description: Installs attributed via SKAN version 3.x
+      - name: SKAN_V4_COUNT
+        description: Installs attributed via SKAN version 4.x
