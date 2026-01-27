@@ -78,13 +78,15 @@ WITH amplitude_events AS (
 )
 
 -- Session events for retention calculation
+-- Using ClientOpened instead of session_start because session_start has USER_ID for only ~13% of events
+-- ClientOpened has USER_ID for 100% of events and represents app opens
 , session_events AS (
     SELECT
         USER_ID
         , PLATFORM
         , DATE(EVENT_TIME) AS SESSION_DATE
     FROM amplitude_events
-    WHERE EVENT_TYPE = 'session_start'
+    WHERE EVENT_TYPE = 'ClientOpened'
     GROUP BY 1, 2, 3
 )
 
