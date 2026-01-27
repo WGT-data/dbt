@@ -1,18 +1,11 @@
--- ============================================================================
--- ADJUST API TO SNOWFLAKE INTEGRATION
--- Part 4: Stored Procedures for Data Loading
--- ============================================================================
--- These procedures handle the data extraction, transformation, and loading
--- ============================================================================
+-- Adjust API Integration - Stored Procedures
+-- Handles the actual data loading logic
 
 USE ROLE SYSADMIN;
 USE DATABASE WGT;
 USE SCHEMA ADJUST_API;
 
--- ============================================================================
--- 1. PROCEDURE: Load Single Day of Data
--- ============================================================================
-
+-- Load a single day of data for one app
 CREATE OR REPLACE PROCEDURE load_adjust_data_for_date(
     p_date DATE,
     p_app_token VARCHAR,
@@ -30,7 +23,6 @@ DECLARE
 BEGIN
     v_start_time := CURRENT_TIMESTAMP();
 
-    -- Get API token
     SELECT CREDENTIAL_VALUE INTO v_api_token
     FROM WGT.ADJUST_API.API_CREDENTIALS
     WHERE CREDENTIAL_NAME = 'ADJUST_API_TOKEN';
@@ -39,10 +31,10 @@ BEGIN
         RETURN 'ERROR: API token not configured. Update API_CREDENTIALS table.';
     END IF;
 
-    -- Call the Snowpark function and insert into staging
+    -- Call API and dump to staging
     INSERT INTO WGT.ADJUST_API.ADJ_CAMPAIGN_API_STAGING (RAW_JSON, API_CALL_DATE)
     SELECT
-        fetch_adjust_data_snowpark(
+        fetch_adjust_data(
             :v_api_token,
             :p_app_token,
             TO_VARCHAR(:p_date, 'YYYY-MM-DD'),
@@ -50,7 +42,7 @@ BEGIN
         ),
         :p_date;
 
-    -- Parse and load into final table
+    -- Parse JSON and merge into final table
     MERGE INTO WGT.ADJUST_API.ADJ_CAMPAIGN_API AS target
     USING (
         SELECT
@@ -74,7 +66,6 @@ BEGIN
             f.value:PLATFORM::VARCHAR AS PLATFORM,
             'USD' AS CURRENCY_CODE,
             'Adjust API' AS DATA_SOURCE_NAME,
-            -- Standard Metrics
             f.value:INSTALLS::NUMBER AS INSTALLS,
             f.value:CLICKS::NUMBER AS CLICKS,
             f.value:IMPRESSIONS::NUMBER AS IMPRESSIONS,
@@ -92,7 +83,6 @@ BEGIN
             f.value:PAID_CLICKS::NUMBER AS PAID_CLICKS,
             f.value:PAID_IMPRESSIONS::NUMBER AS PAID_IMPRESSIONS,
             f.value:PAID_INSTALLS::NUMBER AS PAID_INSTALLS,
-            -- Custom Event Metrics
             f.value:C_DATASCAPE_BUNDLE_PURCHASE_EVENTS::NUMBER AS C_DATASCAPE_BUNDLE_PURCHASE_EVENTS,
             f.value:C_DATASCAPE_BUNDLE_PURCHASE_REVENUE::FLOAT AS C_DATASCAPE_BUNDLE_PURCHASE_REVENUE,
             f.value:C_DATASCAPE_COIN_PURCHASE_EVENTS::NUMBER AS C_DATASCAPE_COIN_PURCHASE_EVENTS,
@@ -263,12 +253,11 @@ BEGIN
         source.C_DATASCAPE_TUTORIAL_COMPLETED_EVENTS, source.C_DATASCAPE_TUTORIAL_COMPLETED_REVENUE
     );
 
-    -- Get row count
     SELECT COUNT(*) INTO v_rows_loaded
     FROM WGT.ADJUST_API.ADJ_CAMPAIGN_API
     WHERE DATE = :p_date AND APP = :p_app_name;
 
-    -- Log the load
+    -- Log it
     INSERT INTO WGT.ADJUST_API.API_LOAD_LOG (
         LOAD_DATE, APP_NAME, STATUS, ROWS_LOADED, STARTED_AT, COMPLETED_AT, DURATION_SECONDS
     ) VALUES (
@@ -301,10 +290,8 @@ EXCEPTION
 END;
 $$;
 
--- ============================================================================
--- 2. PROCEDURE: Daily Load for All Apps
--- ============================================================================
 
+-- Daily load for all active apps (loads yesterday)
 CREATE OR REPLACE PROCEDURE load_adjust_daily()
 RETURNS VARCHAR
 LANGUAGE SQL
@@ -319,7 +306,6 @@ DECLARE
         FROM WGT.ADJUST_API.APP_TOKEN_MAPPING
         WHERE IS_ACTIVE = TRUE;
 BEGIN
-    -- Load yesterday's data (T-1)
     v_load_date := DATEADD('day', -1, CURRENT_DATE());
 
     FOR app IN c_apps DO
@@ -332,10 +318,8 @@ BEGIN
 END;
 $$;
 
--- ============================================================================
--- 3. PROCEDURE: Backfill Date Range
--- ============================================================================
 
+-- Backfill a date range
 CREATE OR REPLACE PROCEDURE backfill_adjust_data(
     p_start_date DATE,
     p_end_date DATE
@@ -368,7 +352,6 @@ BEGIN
 END;
 $$;
 
--- Grant execute permissions
 GRANT USAGE ON PROCEDURE load_adjust_data_for_date(DATE, VARCHAR, VARCHAR) TO ROLE DBT_ROLE;
 GRANT USAGE ON PROCEDURE load_adjust_daily() TO ROLE DBT_ROLE;
 GRANT USAGE ON PROCEDURE backfill_adjust_data(DATE, DATE) TO ROLE DBT_ROLE;

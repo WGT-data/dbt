@@ -1,21 +1,10 @@
--- ============================================================================
--- ADJUST API INTEGRATION - SNOWPARK UDF
--- ============================================================================
--- This script creates a Python UDF that calls the Adjust Reports API
--- directly from Snowflake.
---
--- PREREQUISITE: An admin must first run 00_ACCOUNTADMIN_REQUIRED.sql to create
--- the external access integration.
--- ============================================================================
+-- Adjust API Integration - Snowpark UDF
+-- Python function that calls the Adjust Reports API
+-- Requires: admin must run 00_ACCOUNTADMIN_REQUIRED.sql first
 
 USE ROLE SYSADMIN;
 USE DATABASE WGT;
 USE SCHEMA ADJUST_API;
-
--- ============================================================================
--- 1. CREATE THE SNOWPARK UDF
--- ============================================================================
--- This function calls the Adjust Reports Service API and returns JSON data
 
 CREATE OR REPLACE FUNCTION fetch_adjust_data(
     api_token VARCHAR,
@@ -35,22 +24,9 @@ import requests
 import json
 
 def fetch_data(api_token: str, app_token: str, start_date: str, end_date: str) -> dict:
-    """
-    Fetch campaign data from the Adjust Reports Service API.
-
-    Args:
-        api_token: Adjust API bearer token for authentication
-        app_token: Adjust app token (identifies which app to pull data for)
-        start_date: Start date in YYYY-MM-DD format
-        end_date: End date in YYYY-MM-DD format
-
-    Returns:
-        JSON response from the API containing campaign metrics
-    """
-
     base_url = "https://automate.adjust.com/reports-service/report"
 
-    # Dimensions to group data by (matches Supermetrics structure)
+    # Same dimensions we had in Supermetrics
     dimensions = [
         "day",
         "app",
@@ -72,7 +48,6 @@ def fetch_data(api_token: str, app_token: str, start_date: str, end_date: str) -
         "platform"
     ]
 
-    # Metrics to retrieve
     metrics = [
         "installs",
         "clicks",
@@ -91,7 +66,7 @@ def fetch_data(api_token: str, app_token: str, start_date: str, end_date: str) -
         "paid_clicks",
         "paid_impressions",
         "paid_installs",
-        # Custom WGT events
+        # WGT custom events
         "bundle_purchase_events",
         "bundle_purchase_revenue",
         "coin_purchase_events",
@@ -144,50 +119,20 @@ def fetch_data(api_token: str, app_token: str, start_date: str, end_date: str) -
         return {"error": f"Unexpected error: {str(e)}"}
 $$;
 
--- ============================================================================
--- 2. TEST THE UDF
--- ============================================================================
--- After creating the UDF, test it with this query:
-
+-- Test it like this:
 /*
 SELECT fetch_adjust_data(
     (SELECT CREDENTIAL_VALUE FROM WGT.ADJUST_API.API_CREDENTIALS WHERE CREDENTIAL_NAME = 'ADJUST_API_TOKEN'),
-    'acqu46kv92ss',  -- iOS app token
+    'acqu46kv92ss',
     '2025-01-20',
     '2025-01-20'
 ) AS api_response;
 */
 
--- ============================================================================
--- 3. GRANT PERMISSIONS
--- ============================================================================
-
 GRANT USAGE ON FUNCTION fetch_adjust_data(VARCHAR, VARCHAR, VARCHAR, VARCHAR) TO ROLE DBT_ROLE;
 
 
--- ============================================================================
--- WHAT THIS DOES (Summary for Admin Review)
--- ============================================================================
---
--- Purpose:
---   Pulls marketing attribution data from Adjust (mobile analytics platform)
---   directly into Snowflake, replacing our current Supermetrics integration.
---
--- How it works:
---   1. The UDF makes HTTPS GET requests to automate.adjust.com
---   2. It authenticates using our Adjust API token
---   3. It retrieves campaign performance metrics (installs, clicks, cost, etc.)
---   4. Data is returned as JSON and loaded into Snowflake tables
---
--- Security:
---   - Only connects to automate.adjust.com (Adjust's official API)
---   - Uses bearer token authentication
---   - Read-only operation (no data is sent to Adjust, only retrieved)
---   - API credentials are stored securely in Snowflake
---
--- Why External Access is needed:
---   Snowflake blocks all outbound network calls by default.
---   The External Access Integration creates a controlled exception
---   that allows ONLY this specific UDF to call ONLY automate.adjust.com.
---
--- ============================================================================
+-- For admin reference:
+-- This UDF pulls marketing data from Adjust (installs, clicks, cost, etc.)
+-- It only connects to automate.adjust.com and is read-only
+-- The external access integration is needed because Snowflake blocks outbound calls by default

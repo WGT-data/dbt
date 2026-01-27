@@ -1,114 +1,59 @@
--- ============================================================================
--- ADJUST API TO SNOWFLAKE INTEGRATION
--- Part 5: Snowflake Task for Scheduled Data Loading
--- ============================================================================
--- This creates a scheduled task that runs daily to load Adjust data
--- ============================================================================
+-- Adjust API Integration - Scheduled Tasks
+-- Sets up automatic daily data loading
 
 USE ROLE SYSADMIN;
 USE DATABASE WGT;
 USE SCHEMA ADJUST_API;
 
--- ============================================================================
--- 1. CREATE WAREHOUSE FOR TASKS (if needed)
--- ============================================================================
-
+-- Dedicated warehouse for API tasks
 CREATE WAREHOUSE IF NOT EXISTS ADJUST_API_WH
     WAREHOUSE_SIZE = 'X-SMALL'
-    AUTO_SUSPEND = 60
+    AUTO_SUSPEND = 6
     AUTO_RESUME = TRUE
-    INITIALLY_SUSPENDED = TRUE
-    COMMENT = 'Warehouse for Adjust API data loading tasks';
+    INITIALLY_SUSPENDED = TRUE;
 
--- ============================================================================
--- 2. CREATE DAILY LOAD TASK
--- ============================================================================
--- Runs every day at 6:00 AM UTC (adjust timezone as needed)
-
+-- Daily task - runs at 6 AM UTC, loads yesterday's data
 CREATE OR REPLACE TASK task_load_adjust_daily
     WAREHOUSE = ADJUST_API_WH
     SCHEDULE = 'USING CRON 0 6 * * * UTC'
-    COMMENT = 'Daily load of Adjust campaign data via API'
 AS
     CALL WGT.ADJUST_API.load_adjust_daily();
 
--- ============================================================================
--- 3. CREATE TASK TO RELOAD LAST 7 DAYS (for data corrections)
--- ============================================================================
--- Runs weekly on Sunday at 7:00 AM UTC to catch any late-arriving data
-
+-- Weekly refresh - Sundays at 7 AM UTC, reloads last 7 days to catch late data
 CREATE OR REPLACE TASK task_adjust_weekly_refresh
     WAREHOUSE = ADJUST_API_WH
     SCHEDULE = 'USING CRON 0 7 * * 0 UTC'
-    COMMENT = 'Weekly refresh of last 7 days of Adjust data'
 AS
     CALL WGT.ADJUST_API.backfill_adjust_data(
         DATEADD('day', -7, CURRENT_DATE()),
         DATEADD('day', -1, CURRENT_DATE())
     );
 
--- ============================================================================
--- 4. CREATE CLEANUP TASK
--- ============================================================================
--- Removes old staging data and compresses logs monthly
-
+-- Monthly cleanup - 1st of each month, clears old staging data and logs
 CREATE OR REPLACE TASK task_adjust_monthly_cleanup
     WAREHOUSE = ADJUST_API_WH
     SCHEDULE = 'USING CRON 0 0 1 * * UTC'
-    COMMENT = 'Monthly cleanup of staging data and old logs'
 AS
 BEGIN
-    -- Delete staging data older than 7 days
     DELETE FROM WGT.ADJUST_API.ADJ_CAMPAIGN_API_STAGING
     WHERE LOADED_AT < DATEADD('day', -7, CURRENT_TIMESTAMP());
 
-    -- Delete logs older than 90 days
     DELETE FROM WGT.ADJUST_API.API_LOAD_LOG
     WHERE STARTED_AT < DATEADD('day', -90, CURRENT_TIMESTAMP());
 END;
 
--- ============================================================================
--- 5. ENABLE TASKS
--- ============================================================================
--- Tasks are created in suspended state. Enable them when ready.
-
--- Enable daily task
+-- Turn on the tasks
 ALTER TASK task_load_adjust_daily RESUME;
-
--- Enable weekly refresh task
 ALTER TASK task_adjust_weekly_refresh RESUME;
-
--- Enable monthly cleanup task
 ALTER TASK task_adjust_monthly_cleanup RESUME;
 
--- ============================================================================
--- 6. TASK MANAGEMENT QUERIES
--- ============================================================================
-
--- View all tasks
+-- Handy queries for managing tasks:
 -- SHOW TASKS IN SCHEMA WGT.ADJUST_API;
-
--- View task history
--- SELECT *
--- FROM TABLE(INFORMATION_SCHEMA.TASK_HISTORY(
---     SCHEDULED_TIME_RANGE_START => DATEADD('day', -7, CURRENT_TIMESTAMP()),
---     TASK_NAME => 'TASK_LOAD_ADJUST_DAILY'
--- ))
--- ORDER BY SCHEDULED_TIME DESC;
-
--- Suspend a task
 -- ALTER TASK task_load_adjust_daily SUSPEND;
-
--- Resume a task
 -- ALTER TASK task_load_adjust_daily RESUME;
+-- EXECUTE TASK task_load_adjust_daily;  -- run manually
 
--- Execute task manually (for testing)
--- EXECUTE TASK task_load_adjust_daily;
-
--- ============================================================================
--- 7. MONITORING VIEW
--- ============================================================================
-
+-- Monitoring views
 CREATE OR REPLACE VIEW v_adjust_load_status AS
 SELECT
     LOAD_DATE,
@@ -122,7 +67,6 @@ SELECT
 FROM WGT.ADJUST_API.API_LOAD_LOG
 ORDER BY STARTED_AT DESC;
 
--- View for comparing API data vs Supermetrics
 CREATE OR REPLACE VIEW v_adjust_data_comparison AS
 SELECT
     'Supermetrics' AS SOURCE,
