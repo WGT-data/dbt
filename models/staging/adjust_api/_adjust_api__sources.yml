@@ -59,11 +59,3 @@ sources:
             description: "Number of rows loaded"
           - name: error_message
             description: "Error details if failed"
-
-  - name: supermetrics
-    description: "Supermetrics data transfers (legacy source)"
-    database: SUPERMETRICS
-    schema: DATA_TRANSFERS
-    tables:
-      - name: adj_campaign
-        description: "Legacy Supermetrics Adjust campaign data"
