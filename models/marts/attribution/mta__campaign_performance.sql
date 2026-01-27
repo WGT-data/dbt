@@ -150,7 +150,7 @@ WITH touchpoint_credits AS (
 
 -- Join with spend data
 -- Note: Join via PARTNER_ID to SUPERMETRICS_PARTNER_ID for accurate matching
--- Filter out 'unknown' campaign IDs which cannot be matched
+-- Filter to only numeric campaign IDs (excludes 'unknown', search terms, etc.)
 , spend AS (
     SELECT COALESCE(nm.SUPERMETRICS_PARTNER_NAME, s.PARTNER_NAME) AS AD_PARTNER
          , s.CAMPAIGN_ID_NETWORK AS CAMPAIGN_ID
@@ -162,7 +162,7 @@ WITH touchpoint_credits AS (
     FROM {{ ref('stg_supermetrics__adj_campaign') }} s
     LEFT JOIN network_mapping_deduped nm
         ON s.PARTNER_ID = nm.SUPERMETRICS_PARTNER_ID
-    WHERE LOWER(s.CAMPAIGN_ID_NETWORK) != 'unknown'
+    WHERE TRY_TO_NUMBER(s.CAMPAIGN_ID_NETWORK) IS NOT NULL
     {% if is_incremental() %}
         AND s.DATE >= DATEADD(day, -7, (SELECT MAX(DATE) FROM {{ this }}))
     {% endif %}
