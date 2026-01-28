@@ -103,7 +103,7 @@ def fetch_data(api_token: str, app_token: str, start_date: str, end_date: str) -
         "date_period": f"{start_date}:{end_date}",
         "app_token__in": app_token,
         "currency": "USD",
-        "attribution_type": "click,impression",
+        -- "attribution_type": "click,impression",
         "ad_spend_mode": "network"
     }
 
