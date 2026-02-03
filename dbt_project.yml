@@ -27,6 +27,11 @@ clean-targets:         # directories to be removed by `dbt clean`
 # Configuring models
 # Full documentation: https://docs.getdbt.com/docs/configuring-models
 
+vars:
+  # Schema prefix for dev/prod isolation
+  # Override with --vars '{"schema_prefix": ""}' for prod
+  schema_prefix: "DEV_"
+
 models:
   wgt_dbt:
     staging:
