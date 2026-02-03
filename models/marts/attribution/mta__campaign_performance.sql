@@ -139,33 +139,20 @@ WITH touchpoint_credits AS (
            , INSTALL_DATE
 )
 
--- Get network mapping for standardized partner names (join via PARTNER_ID)
-, network_mapping_deduped AS (
-    SELECT DISTINCT
-        SUPERMETRICS_PARTNER_ID
-        , SUPERMETRICS_PARTNER_NAME
-    FROM {{ ref('network_mapping') }}
-    WHERE SUPERMETRICS_PARTNER_ID IS NOT NULL
-)
-
--- Join with spend data
--- Note: Join via PARTNER_ID to SUPERMETRICS_PARTNER_ID for accurate matching
+-- Join with spend data from Adjust API
 -- Filter to only numeric campaign IDs (excludes 'unknown', search terms, etc.)
--- Cast SUPERMETRICS_PARTNER_ID to VARCHAR to avoid implicit numeric cast of 'unknown' PARTNER_ID
 , spend AS (
-    SELECT COALESCE(nm.SUPERMETRICS_PARTNER_NAME, s.PARTNER_NAME) AS AD_PARTNER
-         , s.CAMPAIGN_ID_NETWORK AS CAMPAIGN_ID
-         , s.PLATFORM
-         , s.DATE
-         , SUM(s.COST) AS COST
-         , SUM(s.CLICKS) AS CLICKS
-         , SUM(s.IMPRESSIONS) AS IMPRESSIONS
-    FROM {{ ref('stg_supermetrics__adj_campaign') }} s
-    LEFT JOIN network_mapping_deduped nm
-        ON s.PARTNER_ID = CAST(nm.SUPERMETRICS_PARTNER_ID AS VARCHAR)
-    WHERE TRY_TO_NUMBER(s.CAMPAIGN_ID_NETWORK) IS NOT NULL
+    SELECT PARTNER_NAME AS AD_PARTNER
+         , CAMPAIGN_ID_NETWORK AS CAMPAIGN_ID
+         , PLATFORM
+         , DATE
+         , SUM(NETWORK_COST) AS COST
+         , SUM(CLICKS) AS CLICKS
+         , SUM(IMPRESSIONS) AS IMPRESSIONS
+    FROM {{ ref('stg_adjust__report_daily') }}
+    WHERE TRY_TO_NUMBER(CAMPAIGN_ID_NETWORK) IS NOT NULL
     {% if is_incremental() %}
-        AND s.DATE >= DATEADD(day, -7, (SELECT MAX(DATE) FROM {{ this }}))
+        AND DATE >= DATEADD(day, -7, (SELECT MAX(DATE) FROM {{ this }}))
     {% endif %}
     GROUP BY 1, 2, 3, 4
 )

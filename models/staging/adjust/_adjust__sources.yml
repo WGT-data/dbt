@@ -3,7 +3,7 @@ version: 2
 sources:
   - name: adjust
     description: Adjust mobile attribution data
-    database: ADJUST_S3
+    database: ADJUST
     schema: DBT_WGTDATA_PROD_DATA
     tables:
       - name: IOS_ACTIVITY_INSTALL
@@ -32,3 +32,11 @@ sources:
         description: Android impression events
       - name: ANDROID_ACTIVITY_REATTRIBUTION
         description: Android reattribution events
+
+  - name: adjust_api_data
+    description: Adjust API aggregated report data
+    database: ADJUST
+    schema: API_DATA
+    tables:
+      - name: REPORT_DAILY_RAW
+        description: Daily aggregated campaign performance data from Adjust API
