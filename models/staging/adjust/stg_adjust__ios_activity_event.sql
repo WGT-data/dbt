@@ -10,7 +10,7 @@
 }}
 
 SELECT *
-FROM ADJUST.S3_DATA.IOS_EVENTS
+FROM ADJUST.{{ get_source_schema('S3_DATA') }}.IOS_EVENTS
 WHERE ACTIVITY_KIND = 'event'
 {% if is_incremental() %}
     AND LOAD_TIMESTAMP > (SELECT MAX(LOAD_TIMESTAMP) FROM {{ this }})

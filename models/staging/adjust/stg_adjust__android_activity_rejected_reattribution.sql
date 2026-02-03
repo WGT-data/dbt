@@ -10,7 +10,7 @@
 }}
 
 SELECT *
-FROM ADJUST.S3_DATA.ANDROID_EVENTS
+FROM ADJUST.{{ get_source_schema('S3_DATA') }}.ANDROID_EVENTS
 WHERE ACTIVITY_KIND = 'rejected_reattribution'
 {% if is_incremental() %}
     AND LOAD_TIMESTAMP > (SELECT MAX(LOAD_TIMESTAMP) FROM {{ this }})
