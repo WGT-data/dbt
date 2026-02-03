@@ -4,7 +4,7 @@ sources:
   - name: adjust
     description: Adjust mobile attribution data
     database: ADJUST
-    schema: DBT_WGTDATA_PROD_DATA
+    schema: S3_DATA
     tables:
       - name: IOS_ACTIVITY_INSTALL
         description: iOS install events with attribution data
