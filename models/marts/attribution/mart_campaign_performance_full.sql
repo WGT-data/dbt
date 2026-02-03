@@ -13,28 +13,26 @@
     tags=['mart', 'performance']
 ) }}
 
--- Spend data from Supermetrics (Adjust Network API costs)
+-- Spend data from Adjust API (REPORT_DAILY_RAW)
 WITH spend_data AS (
-    SELECT
-        DATE
-        , PARTNER_NAME AS AD_PARTNER
-        , PARTNER_ID
-        , CAMPAIGN_NETWORK AS CAMPAIGN_NAME
-        , CAMPAIGN_ID_NETWORK AS CAMPAIGN_ID
-        , ADGROUP_NETWORK AS ADGROUP_NAME
-        , ADGROUP_ID_NETWORK AS ADGROUP_ID
-        , PLATFORM
-        , SUM(NETWORK_COST) AS COST
-        , SUM(CLICKS) AS CLICKS
-        , SUM(IMPRESSIONS) AS IMPRESSIONS
-        , SUM(INSTALLS) AS ADJUST_INSTALLS
-    FROM {{ source('supermetrics', 'adj_campaign') }}
+    SELECT DATE
+         , PARTNER_NAME AS AD_PARTNER
+         , CAMPAIGN_NETWORK AS CAMPAIGN_NAME
+         , CAMPAIGN_ID_NETWORK AS CAMPAIGN_ID
+         , ADGROUP_NETWORK AS ADGROUP_NAME
+         , ADGROUP_ID_NETWORK AS ADGROUP_ID
+         , PLATFORM
+         , SUM(NETWORK_COST) AS COST
+         , SUM(CLICKS) AS CLICKS
+         , SUM(IMPRESSIONS) AS IMPRESSIONS
+         , SUM(INSTALLS) AS ADJUST_INSTALLS
+    FROM {{ ref('stg_adjust__report_daily') }}
     WHERE DATE IS NOT NULL
     {% if is_incremental() %}
         -- 3-day lookback for late-arriving spend data
         AND DATE >= DATEADD(day, -3, (SELECT MAX(DATE) FROM {{ this }}))
     {% endif %}
-    GROUP BY 1, 2, 3, 4, 5, 6, 7, 8
+    GROUP BY 1, 2, 3, 4, 5, 6, 7
 )
 
 -- User attribution data (filtered for incremental)
@@ -135,15 +133,6 @@ WITH spend_data AS (
     FROM user_full
     WHERE INSTALL_DATE IS NOT NULL
     GROUP BY 1, 2, 3, 4, 5, 6
-)
-
--- Network mapping for joining spend with cohort data
-, network_map AS (
-    SELECT 
-        ADJUST_NETWORK_NAME
-        , SUPERMETRICS_PARTNER_NAME
-        , SUPERMETRICS_PARTNER_ID
-    FROM {{ ref('network_mapping') }}
 )
 
 -- Join spend with cohort metrics
