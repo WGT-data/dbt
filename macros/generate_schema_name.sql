@@ -6,7 +6,9 @@
         - Adjust activity models (schema='S3_DATA'):
             - dev: DEV_S3_DATA
             - prod: S3_DATA
-        - All other models: DBT_ANALYTICS (both dev and prod)
+        - All other models:
+            - dev: DBT_WGTDATA
+            - prod: DBT_ANALYTICS
     #}
 
     {%- if custom_schema_name is not none and custom_schema_name | trim | upper == 'S3_DATA' -%}
@@ -17,8 +19,12 @@
             DEV_S3_DATA
         {%- endif -%}
     {%- else -%}
-        {# Everything else goes to DBT_ANALYTICS #}
-        DBT_ANALYTICS
+        {# Everything else goes to DBT_WGTDATA (dev) or PROD (prod) #}
+        {%- if target.name == 'prod' -%}
+            PROD
+        {%- else -%}
+            DBT_WGTDATA
+        {%- endif -%}
     {%- endif -%}
 
 {%- endmacro %}
