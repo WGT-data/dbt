@@ -3,20 +3,22 @@
     {#
         This macro controls where models are written based on target environment.
 
-        For dev target: Prefixes schema with 'DEV_' (e.g., S3_DATA -> DEV_S3_DATA)
-        For prod target: Uses the schema as-is (e.g., S3_DATA)
-
-        If no custom schema is provided, falls back to the target schema.
+        - Adjust activity models (schema='S3_DATA'):
+            - dev: DEV_S3_DATA
+            - prod: S3_DATA
+        - All other models: DBT_ANALYTICS (both dev and prod)
     #}
 
-    {%- set default_schema = target.schema -%}
-
-    {%- if custom_schema_name is none -%}
-        {{ default_schema }}
-    {%- elif target.name == 'prod' -%}
-        {{ custom_schema_name | trim }}
+    {%- if custom_schema_name is not none and custom_schema_name | trim | upper == 'S3_DATA' -%}
+        {# Adjust activity models go to S3_DATA or DEV_S3_DATA #}
+        {%- if target.name == 'prod' -%}
+            S3_DATA
+        {%- else -%}
+            DEV_S3_DATA
+        {%- endif -%}
     {%- else -%}
-        DEV_{{ custom_schema_name | trim }}
+        {# Everything else goes to DBT_ANALYTICS #}
+        DBT_ANALYTICS
     {%- endif -%}
 
 {%- endmacro %}

@@ -1,13 +1,7 @@
 {% macro get_source_schema(base_schema) -%}
     {#
-        Returns the appropriate source schema based on target environment.
-
-        For dev target: Prefixes schema with 'DEV_' (e.g., S3_DATA -> DEV_S3_DATA)
-        For prod target: Uses the schema as-is (e.g., S3_DATA)
+        Returns the source schema for reading raw data.
+        Always reads from prod S3_DATA since that's where the raw events live.
     #}
-    {%- if target.name == 'prod' -%}
-        {{ base_schema }}
-    {%- else -%}
-        DEV_{{ base_schema }}
-    {%- endif -%}
+    {{- base_schema -}}
 {%- endmacro %}
