@@ -29,7 +29,7 @@ WITH skan_installs AS (
         , SK_DID_WIN
         , SK_VERSION
         , SK_TRANSACTION_ID
-    FROM {{ source('adjust', 'IOS_ACTIVITY_SK_INSTALL') }}
+    FROM {{ ref('stg_adjust__ios_activity_sk_install') }}
     WHERE SK_TS IS NOT NULL
     {% if is_incremental() %}
         AND DATE(TO_TIMESTAMP(SK_TS)) >= DATEADD(day, -7, (SELECT MAX(INSTALL_DATE) FROM {{ this }}))

@@ -28,7 +28,7 @@ WITH ios_installs AS (
             ORDER BY TO_TIMESTAMP(i.INSTALLED_AT) ASC
         ) AS RN
     FROM {{ ref('int_adjust_amplitude__device_mapping') }} dm
-    INNER JOIN {{ source('adjust', 'IOS_ACTIVITY_INSTALL') }} i
+    INNER JOIN {{ ref('stg_adjust__ios_activity_install') }} i
         ON UPPER(dm.ADJUST_DEVICE_ID) = UPPER(i.IDFV)
     WHERE dm.PLATFORM = 'iOS'
     AND dm.AMPLITUDE_USER_ID IS NOT NULL
@@ -54,7 +54,7 @@ WITH ios_installs AS (
             ORDER BY TO_TIMESTAMP(i.INSTALLED_AT) ASC
         ) AS RN
     FROM {{ ref('int_adjust_amplitude__device_mapping') }} dm
-    INNER JOIN {{ source('adjust', 'ANDROID_ACTIVITY_INSTALL') }} i
+    INNER JOIN {{ ref('stg_adjust__android_activity_install') }} i
         ON dm.ADJUST_DEVICE_ID = i.GPS_ADID
     WHERE dm.PLATFORM = 'Android'
     AND dm.AMPLITUDE_USER_ID IS NOT NULL
