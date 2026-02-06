@@ -3,11 +3,11 @@ version: 2
 sources:
   - name: adjust_api
     description: "Adjust campaign data loaded via the Reports Service API"
-    database: WGT
-    schema: ADJUST_API
+    database: ADJUST
+    schema: API_DATA
     tables:
-      - name: adj_campaign_api
-        description: "Campaign-level metrics from Adjust API, structured to match Supermetrics ADJ_CAMPAIGN"
+      - name: REPORT_DAILY_RAW
+        description: "Daily campaign-level metrics from Adjust API"
         columns:
           - name: date
             description: "Date of the metrics"

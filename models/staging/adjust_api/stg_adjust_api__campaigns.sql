@@ -7,13 +7,14 @@
 
 /*
     Staging model for Adjust API campaign data.
-    This model provides a clean interface to the API-loaded data,
-    with column naming and typing consistent with the Supermetrics source.
+    Maps ADJUST.API_DATA.REPORT_DAILY_RAW columns to match
+    the Supermetrics source schema for compatibility with
+    stg_adjust__campaigns_unified.
 */
 
 with source as (
 
-    select * from {{ source('adjust_api', 'adj_campaign_api') }}
+    select * from {{ source('adjust_api', 'REPORT_DAILY_RAW') }}
 
 ),
 
@@ -21,26 +22,30 @@ renamed as (
 
     select
         -- Dimensions
-        date as report_date,
+        day as report_date,
         app as app_name,
         os_name,
         device_type,
         country,
         country_code,
         region,
-        partner_id,
-        partner_name,
+        network as partner_id,
+        network as partner_name,
         campaign_id_network,
         campaign_network as campaign_name,
         adgroup_id_network,
         adgroup_network as adgroup_name,
-        ad_id,
-        ad_name,
+        creative_id_network as ad_id,
+        creative_network as ad_name,
         store_id,
         store_type,
-        platform,
-        currency_code,
-        data_source_name,
+        case
+            when upper(os_name) = 'IOS' then 'iOS'
+            when upper(os_name) = 'ANDROID' then 'Android'
+            else os_name
+        end as platform,
+        null as currency_code,
+        source_network as data_source_name,
 
         -- Standard Metrics
         coalesce(installs, 0) as installs,
@@ -61,34 +66,34 @@ renamed as (
         coalesce(paid_impressions, 0) as paid_impressions,
         coalesce(paid_installs, 0) as paid_installs,
 
-        -- Revenue Events
-        coalesce(c_datascape_bundle_purchase_events, 0) as bundle_purchase_events,
-        coalesce(c_datascape_bundle_purchase_revenue, 0) as bundle_purchase_revenue,
-        coalesce(c_datascape_coin_purchase_events, 0) as coin_purchase_events,
-        coalesce(c_datascape_coin_purchase_revenue, 0) as coin_purchase_revenue,
-        coalesce(c_datascape_credit_purchase_events, 0) as credit_purchase_events,
-        coalesce(c_datascape_credit_purchase_revenue, 0) as credit_purchase_revenue,
-        coalesce(c_datascape_playforcashclick_events, 0) as playforcash_click_events,
-        coalesce(c_datascape_playforcashclick_revenue, 0) as playforcash_click_revenue,
+        -- Revenue Events (not broken out in API data)
+        0 as bundle_purchase_events,
+        0 as bundle_purchase_revenue,
+        0 as coin_purchase_events,
+        0 as coin_purchase_revenue,
+        0 as credit_purchase_events,
+        0 as credit_purchase_revenue,
+        0 as playforcash_click_events,
+        0 as playforcash_click_revenue,
 
-        -- Level Events
-        coalesce(c_datascape_reachlevel_5_events, 0) as reach_level_5_events,
-        coalesce(c_datascape_reachlevel_10_events, 0) as reach_level_10_events,
-        coalesce(c_datascape_reachlevel_20_events, 0) as reach_level_20_events,
-        coalesce(c_datascape_reachlevel_30_events, 0) as reach_level_30_events,
-        coalesce(c_datascape_reachlevel_40_events, 0) as reach_level_40_events,
-        coalesce(c_datascape_reachlevel_50_events, 0) as reach_level_50_events,
-        coalesce(c_datascape_reachlevel_60_events, 0) as reach_level_60_events,
-        coalesce(c_datascape_reachlevel_70_events, 0) as reach_level_70_events,
-        coalesce(c_datascape_reachlevel_80_events, 0) as reach_level_80_events,
-        coalesce(c_datascape_reachlevel_90_events, 0) as reach_level_90_events,
-        coalesce(c_datascape_reachlevel_100_events, 0) as reach_level_100_events,
-        coalesce(c_datascape_reachlevel_110_events, 0) as reach_level_110_events,
+        -- Level Events (not available in API data)
+        0 as reach_level_5_events,
+        0 as reach_level_10_events,
+        0 as reach_level_20_events,
+        0 as reach_level_30_events,
+        0 as reach_level_40_events,
+        0 as reach_level_50_events,
+        0 as reach_level_60_events,
+        0 as reach_level_70_events,
+        0 as reach_level_80_events,
+        0 as reach_level_90_events,
+        0 as reach_level_100_events,
+        0 as reach_level_110_events,
 
-        -- Onboarding Events
-        coalesce(c_datascape_registration_events, 0) as registration_events,
-        coalesce(c_datascape_tutorial_completed_events, 0) as tutorial_completed_events,
-        coalesce(c_datascape_tutorial_completed_revenue, 0) as tutorial_completed_revenue,
+        -- Onboarding Events (not available in API data)
+        0 as registration_events,
+        0 as tutorial_completed_events,
+        0 as tutorial_completed_revenue,
 
         -- Calculated Metrics
         case
@@ -106,15 +111,11 @@ renamed as (
             else 0
         end as cpi,
 
-        -- Total Revenue (sum of all revenue events)
-        coalesce(c_datascape_bundle_purchase_revenue, 0)
-        + coalesce(c_datascape_coin_purchase_revenue, 0)
-        + coalesce(c_datascape_credit_purchase_revenue, 0)
-        + coalesce(c_datascape_playforcashclick_revenue, 0)
-        as total_revenue,
+        -- Total Revenue (aggregate from API)
+        coalesce(revenue, 0) as total_revenue,
 
         -- Metadata
-        loaded_at
+        null as loaded_at
 
     from source
 

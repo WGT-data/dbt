@@ -34,7 +34,11 @@ with supermetrics_data as (
         ad_name,
         store_id,
         store_type,
-        platform,
+        case
+            when upper(os_name) = 'IOS' then 'iOS'
+            when upper(os_name) = 'ANDROID' then 'Android'
+            else os_name
+        end as platform,
         currency_code,
         'Supermetrics' as data_source,
 
