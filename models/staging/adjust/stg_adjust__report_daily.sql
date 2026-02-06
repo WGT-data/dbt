@@ -20,9 +20,9 @@ SELECT DAY AS DATE
      , DEVICE_TYPE
      , OS_NAME
      , CASE
-         WHEN UPPER(OS_NAME) = 'IOS' THEN 'ios'
-         WHEN UPPER(OS_NAME) = 'ANDROID' THEN 'android'
-         ELSE LOWER(OS_NAME)
+         WHEN UPPER(OS_NAME) = 'IOS' THEN 'iOS'
+         WHEN UPPER(OS_NAME) = 'ANDROID' THEN 'Android'
+         ELSE OS_NAME
        END AS PLATFORM
      , CHANNEL
      , NETWORK AS PARTNER_NAME

@@ -210,14 +210,15 @@ WITH installs AS (
 , journey_with_position AS (
     SELECT *
          -- Position from first touchpoint (1 = first)
+         -- Secondary sort keys break ties when timestamps are identical
          , ROW_NUMBER() OVER (
                PARTITION BY DEVICE_ID, PLATFORM, INSTALL_TIMESTAMP
-               ORDER BY TOUCHPOINT_TIMESTAMP ASC
+               ORDER BY TOUCHPOINT_TIMESTAMP ASC, TOUCHPOINT_TYPE DESC, NETWORK_NAME ASC, CAMPAIGN_NAME ASC
            ) AS TOUCHPOINT_POSITION
          -- Position from last touchpoint (1 = last)
          , ROW_NUMBER() OVER (
                PARTITION BY DEVICE_ID, PLATFORM, INSTALL_TIMESTAMP
-               ORDER BY TOUCHPOINT_TIMESTAMP DESC
+               ORDER BY TOUCHPOINT_TIMESTAMP DESC, TOUCHPOINT_TYPE ASC, NETWORK_NAME DESC, CAMPAIGN_NAME DESC
            ) AS REVERSE_POSITION
          -- Total touchpoints in journey
          , COUNT(*) OVER (
@@ -226,12 +227,12 @@ WITH installs AS (
          -- Is this the first touchpoint?
          , CASE WHEN ROW_NUMBER() OVER (
                PARTITION BY DEVICE_ID, PLATFORM, INSTALL_TIMESTAMP
-               ORDER BY TOUCHPOINT_TIMESTAMP ASC
+               ORDER BY TOUCHPOINT_TIMESTAMP ASC, TOUCHPOINT_TYPE DESC, NETWORK_NAME ASC, CAMPAIGN_NAME ASC
            ) = 1 THEN 1 ELSE 0 END AS IS_FIRST_TOUCH
          -- Is this the last touchpoint?
          , CASE WHEN ROW_NUMBER() OVER (
                PARTITION BY DEVICE_ID, PLATFORM, INSTALL_TIMESTAMP
-               ORDER BY TOUCHPOINT_TIMESTAMP DESC
+               ORDER BY TOUCHPOINT_TIMESTAMP DESC, TOUCHPOINT_TYPE ASC, NETWORK_NAME DESC, CAMPAIGN_NAME DESC
            ) = 1 THEN 1 ELSE 0 END AS IS_LAST_TOUCH
     FROM touchpoints_with_install
 )

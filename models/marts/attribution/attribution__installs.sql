@@ -1,7 +1,7 @@
 {{
     config(
         materialized='incremental',
-        unique_key=['AD_PARTNER', 'NETWORK_NAME', 'CAMPAIGN_ID', 'ADGROUP_ID', 'PLATFORM', 'INSTALL_DATE'],
+        unique_key=['AD_PARTNER', 'NETWORK_NAME', 'CAMPAIGN_NAME', 'CAMPAIGN_ID', 'ADGROUP_NAME', 'ADGROUP_ID', 'PLATFORM', 'INSTALL_DATE'],
         incremental_strategy='merge',
         on_schema_change='append_new_columns'
     )
@@ -72,8 +72,8 @@ WITH INSTALLS AS (
 , FIRST_USER_INSTALLS AS (
     SELECT AD_PARTNER
          , NETWORK_NAME
-         , CAMPAIGN_ID
-         , ADGROUP_ID
+         , COALESCE(CAMPAIGN_ID, '__UNKNOWN__') AS CAMPAIGN_ID
+         , COALESCE(ADGROUP_ID, '__UNKNOWN__') AS ADGROUP_ID
          , PLATFORM
          , INSTALL_DATE
          , AMPLITUDE_USER_ID
@@ -147,9 +147,9 @@ WITH INSTALLS AS (
     SELECT AD_PARTNER
          , NETWORK_NAME
          , CAMPAIGN_NAME
-         , CAMPAIGN_ID
+         , COALESCE(CAMPAIGN_ID, '__UNKNOWN__') AS CAMPAIGN_ID
          , ADGROUP_NAME
-         , ADGROUP_ID
+         , COALESCE(ADGROUP_ID, '__UNKNOWN__') AS ADGROUP_ID
          , PLATFORM
          , INSTALL_DATE
          , COUNT(DISTINCT DEVICE_ID) AS INSTALLS
@@ -158,9 +158,9 @@ WITH INSTALLS AS (
     GROUP BY AD_PARTNER
          , NETWORK_NAME
          , CAMPAIGN_NAME
-         , CAMPAIGN_ID
+         , COALESCE(CAMPAIGN_ID, '__UNKNOWN__')
          , ADGROUP_NAME
-         , ADGROUP_ID
+         , COALESCE(ADGROUP_ID, '__UNKNOWN__')
          , PLATFORM
          , INSTALL_DATE
 )

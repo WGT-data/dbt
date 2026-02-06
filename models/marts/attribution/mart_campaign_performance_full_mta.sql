@@ -33,11 +33,11 @@ WITH spend_data AS (
         , PARTNER_NAME AS AD_PARTNER
         , CAMPAIGN_NETWORK AS CAMPAIGN_NAME
         , PLATFORM
-        , SUM(NETWORK_COST) AS COST
+        , SUM(COST) AS COST
         , SUM(CLICKS) AS CLICKS
         , SUM(IMPRESSIONS) AS IMPRESSIONS
         , SUM(INSTALLS) AS ADJUST_NETWORK_INSTALLS
-    FROM {{ source('supermetrics', 'adj_campaign') }}
+    FROM {{ ref('stg_supermetrics__adj_campaign') }}
     WHERE DATE IS NOT NULL
     {% if is_incremental() %}
         AND DATE >= DATEADD(day, -3, (SELECT MAX(DATE) FROM {{ this }}))
