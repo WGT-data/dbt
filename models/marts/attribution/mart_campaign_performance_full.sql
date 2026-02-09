@@ -7,7 +7,7 @@
 
 {{ config(
     materialized='incremental',
-    unique_key=['AD_PARTNER', 'CAMPAIGN_NAME', 'ADGROUP_NAME', 'PLATFORM', 'DATE'],
+    unique_key=['AD_PARTNER', 'NETWORK_NAME', 'CAMPAIGN_NAME', 'ADGROUP_NAME', 'PLATFORM', 'DATE'],
     incremental_strategy='merge',
     on_schema_change='append_new_columns',
     tags=['mart', 'performance']
