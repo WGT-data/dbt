@@ -1,22 +1,22 @@
-adjust_network_name,supermetrics_partner_id,supermetrics_partner_name
-Facebook Installs,34,Facebook
-Facebook Messenger Installs,34,Facebook
-Instagram Installs,34,Facebook
-Off-Facebook Installs,34,Facebook
-AppLovin_iOS_2019,7,Applovin
-Google Ads ACE,254,Google Ads
-Google Ads ACI,254,Google Ads
-google,254,Google Ads
-Apple Search Ads,257,Apple
-Moloco_DSP_iOS,56,MOLOCO
-Smadex DSP - iOS,715,Smadex
-Smadex DSP - iOS 2025,715,Smadex
-Smadex DSP - iOS 2025 NEW,715,Smadex
-TikTok SAN,2337,TikTok for Business
-TikTok_Paid_Ads_iOS,2337,TikTok for Business
-Tiktok Installs,2337,TikTok for Business
-UnityAds_2023_iOS_Launch_Campaign,42,Unity Ads
-UnityAds_2023_iOS_ROAS_D7_Campaign,42,Unity Ads
-Organic,-300,Organic
-AdAction_iOS_2021,234,AdAction
-Unattributed,-300,Organic
+adjust_network_name,supermetrics_partner_id,supermetrics_partner_name,ad_partner
+Facebook Installs,34,Facebook,Meta
+Facebook Messenger Installs,34,Facebook,Meta
+Instagram Installs,34,Facebook,Meta
+Off-Facebook Installs,34,Facebook,Meta
+AppLovin_iOS_2019,7,Applovin,AppLovin
+Google Ads ACE,254,Google Ads,Google
+Google Ads ACI,254,Google Ads,Google
+google,254,Google Ads,Google
+Apple Search Ads,257,Apple,Apple
+Moloco_DSP_iOS,56,MOLOCO,Moloco
+Smadex DSP - iOS,715,Smadex,Smadex
+Smadex DSP - iOS 2025,715,Smadex,Smadex
+Smadex DSP - iOS 2025 NEW,715,Smadex,Smadex
+TikTok SAN,2337,TikTok for Business,TikTok
+TikTok_Paid_Ads_iOS,2337,TikTok for Business,TikTok
+Tiktok Installs,2337,TikTok for Business,TikTok
+UnityAds_2023_iOS_Launch_Campaign,42,Unity Ads,Unity
+UnityAds_2023_iOS_ROAS_D7_Campaign,42,Unity Ads,Unity
+Organic,-300,Organic,Organic
+AdAction_iOS_2021,234,AdAction,AdAction
+Unattributed,-300,Organic,Unattributed

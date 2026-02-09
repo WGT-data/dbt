@@ -11,6 +11,15 @@
 -- IP addresses are personal data under GDPR and cannot be used for attribution
 -- without explicit consent. Analysis showed IP matching also produced unreliable
 -- data (median 270 touchpoints/journey, max 25,500 due to carrier NAT collisions).
+--
+-- KNOWN LIMITATIONS:
+-- - SAN partners (Meta, Google, Apple) do not pass device-level touchpoint data
+--   via S3, so MTA coverage for these networks will be near zero. SKAN data
+--   exists but is aggregate-only and cannot feed device-level MTA.
+-- - iOS IDFA consent rate is ~3.3%, severely limiting iOS MTA coverage.
+-- - MTA credits touchpoints by the TOUCHPOINT's network, not the install's
+--   attributed network. This is intentional — it is the purpose of MTA to
+--   redistribute credit across all touchpoints in a user's journey.
 
 {{
     config(

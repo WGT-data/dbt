@@ -4,6 +4,17 @@
 -- Compare different attribution models side-by-side
 --
 -- Grain: One row per AD_PARTNER + CAMPAIGN_ID + PLATFORM + DATE
+--
+-- KNOWN LIMITATIONS:
+-- - SAN partners (Meta, Google, Apple) do not pass device-level touchpoint data
+--   via S3, so MTA coverage for these networks will be near zero.
+-- - MTA credits touchpoints by the TOUCHPOINT's network, not the install's
+--   attributed network. Programmatic partners (Moloco, Smadex, AdAction) may
+--   receive credit for touchpoints on installs attributed to other networks.
+--   This is expected MTA behavior.
+-- - iOS IDFA consent rate is ~3.3%, limiting iOS MTA coverage.
+-- - HAS_SPEND_NO_MTA flag indicates rows where spend exists but no MTA data
+--   could be matched (common for SANs).
 
 {{
     config(
@@ -139,20 +150,30 @@ WITH touchpoint_credits AS (
            , INSTALL_DATE
 )
 
+-- Map spend partner names to canonical AD_PARTNER names
+, partner_map AS (
+    SELECT DISTINCT
+        SUPERMETRICS_PARTNER_NAME AS PARTNER_NAME
+        , AD_PARTNER
+    FROM {{ ref('network_mapping') }}
+    WHERE AD_PARTNER IS NOT NULL
+)
+
 -- Join with spend data from Adjust API
 -- Filter to only numeric campaign IDs (excludes 'unknown', search terms, etc.)
 , spend AS (
-    SELECT PARTNER_NAME AS AD_PARTNER
-         , CAMPAIGN_ID_NETWORK AS CAMPAIGN_ID
-         , PLATFORM
-         , DATE
-         , SUM(NETWORK_COST) AS COST
-         , SUM(CLICKS) AS CLICKS
-         , SUM(IMPRESSIONS) AS IMPRESSIONS
-    FROM {{ ref('stg_adjust__report_daily') }}
-    WHERE TRY_TO_NUMBER(CAMPAIGN_ID_NETWORK) IS NOT NULL
+    SELECT COALESCE(pm.AD_PARTNER, s.PARTNER_NAME) AS AD_PARTNER
+         , s.CAMPAIGN_ID_NETWORK AS CAMPAIGN_ID
+         , s.PLATFORM
+         , s.DATE
+         , SUM(s.NETWORK_COST) AS COST
+         , SUM(s.CLICKS) AS CLICKS
+         , SUM(s.IMPRESSIONS) AS IMPRESSIONS
+    FROM {{ ref('stg_adjust__report_daily') }} s
+    LEFT JOIN partner_map pm ON s.PARTNER_NAME = pm.PARTNER_NAME
+    WHERE TRY_TO_NUMBER(s.CAMPAIGN_ID_NETWORK) IS NOT NULL
     {% if is_incremental() %}
-        AND DATE >= DATEADD(day, -7, (SELECT MAX(DATE) FROM {{ this }}))
+        AND s.DATE >= DATEADD(day, -7, (SELECT MAX(DATE) FROM {{ this }}))
     {% endif %}
     GROUP BY 1, 2, 3, 4
 )
@@ -204,12 +225,14 @@ WITH touchpoint_credits AS (
          , COALESCE(a.TOTAL_REVENUE_RECOMMENDED, 0) AS TOTAL_REVENUE_RECOMMENDED
 
          , COALESCE(a.UNIQUE_DEVICES, 0) AS UNIQUE_DEVICES
+         , COALESCE(s.COST, 0) > 0 AND COALESCE(a.UNIQUE_DEVICES, 0) = 0 AS HAS_SPEND_NO_MTA
 
     FROM campaign_aggregated a
     FULL OUTER JOIN spend s
         ON a.CAMPAIGN_ID = s.CAMPAIGN_ID
         AND a.PLATFORM = s.PLATFORM
         AND a.DATE = s.DATE
+        AND a.AD_PARTNER = s.AD_PARTNER
 )
 
 SELECT *

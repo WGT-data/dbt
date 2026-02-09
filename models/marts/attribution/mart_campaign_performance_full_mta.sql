@@ -27,17 +27,26 @@
 -- SPEND DATA (from Supermetrics/Adjust Network API)
 -- Aggregated to campaign level
 -- =============================================
-WITH spend_data AS (
+WITH partner_map AS (
+    SELECT DISTINCT
+        SUPERMETRICS_PARTNER_NAME AS PARTNER_NAME
+        , AD_PARTNER
+    FROM {{ ref('network_mapping') }}
+    WHERE AD_PARTNER IS NOT NULL
+)
+
+, spend_data AS (
     SELECT
         DATE
-        , PARTNER_NAME AS AD_PARTNER
+        , COALESCE(pm.AD_PARTNER, s.PARTNER_NAME) AS AD_PARTNER
         , CAMPAIGN_NETWORK AS CAMPAIGN_NAME
         , PLATFORM
         , SUM(COST) AS COST
         , SUM(CLICKS) AS CLICKS
         , SUM(IMPRESSIONS) AS IMPRESSIONS
         , SUM(INSTALLS) AS ADJUST_NETWORK_INSTALLS
-    FROM {{ ref('stg_supermetrics__adj_campaign') }}
+    FROM {{ ref('stg_supermetrics__adj_campaign') }} s
+    LEFT JOIN partner_map pm ON s.PARTNER_NAME = pm.PARTNER_NAME
     WHERE DATE IS NOT NULL
     {% if is_incremental() %}
         AND DATE >= DATEADD(day, -3, (SELECT MAX(DATE) FROM {{ this }}))
@@ -628,6 +637,15 @@ SELECT
     , CASE WHEN MTA_D30_MATURED > 0 THEN MTA_LINEAR_D30_RETAINED / MTA_D30_MATURED ELSE NULL END AS MTA_LINEAR_D30_RETENTION
     , CASE WHEN MTA_D30_MATURED > 0 THEN MTA_TIME_DECAY_D30_RETAINED / MTA_D30_MATURED ELSE NULL END AS MTA_TIME_DECAY_D30_RETENTION
     , CASE WHEN MTA_D30_MATURED > 0 THEN MTA_POSITION_BASED_D30_RETAINED / MTA_D30_MATURED ELSE NULL END AS MTA_POSITION_BASED_D30_RETENTION
+
+    -- =============================================
+    -- MTA COVERAGE (fraction of installs with MTA data)
+    -- Values near 0 for Meta/Google indicate SAN data limitations
+    -- =============================================
+    , CASE WHEN ADJUST_INSTALLS > 0
+        THEN MTA_TIME_DECAY_INSTALLS / ADJUST_INSTALLS
+        ELSE NULL
+      END AS MTA_COVERAGE_RATE
 
 FROM combined
 WHERE DATE IS NOT NULL

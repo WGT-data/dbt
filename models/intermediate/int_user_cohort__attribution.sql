@@ -55,7 +55,7 @@ WITH ios_installs AS (
         ) AS RN
     FROM {{ ref('int_adjust_amplitude__device_mapping') }} dm
     INNER JOIN {{ ref('stg_adjust__android_activity_install') }} i
-        ON dm.ADJUST_DEVICE_ID = i.GPS_ADID
+        ON UPPER(dm.ADJUST_DEVICE_ID) = UPPER(i.GPS_ADID)
     WHERE dm.PLATFORM = 'Android'
     AND dm.AMPLITUDE_USER_ID IS NOT NULL
     AND i.INSTALLED_AT IS NOT NULL
@@ -100,7 +100,7 @@ WITH ios_installs AS (
         a.USER_ID
         , a.PLATFORM
         , a.ADJUST_DEVICE_ID
-        , COALESCE(nm.SUPERMETRICS_PARTNER_NAME, a.NETWORK_NAME) AS AD_PARTNER
+        , COALESCE(nm.AD_PARTNER, a.NETWORK_NAME) AS AD_PARTNER
         , a.NETWORK_NAME
         , a.CAMPAIGN_NAME
         , a.ADGROUP_NAME

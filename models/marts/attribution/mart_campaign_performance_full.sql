@@ -13,24 +13,34 @@
     tags=['mart', 'performance']
 ) }}
 
+-- Map spend partner names to canonical AD_PARTNER names
+WITH partner_map AS (
+    SELECT DISTINCT
+        SUPERMETRICS_PARTNER_NAME AS PARTNER_NAME
+        , AD_PARTNER
+    FROM {{ ref('network_mapping') }}
+    WHERE AD_PARTNER IS NOT NULL
+)
+
 -- Spend data from Adjust API (REPORT_DAILY_RAW)
-WITH spend_data AS (
+, spend_data AS (
     SELECT DATE
-         , PARTNER_NAME AS AD_PARTNER
-         , CAMPAIGN_NETWORK AS CAMPAIGN_NAME
-         , CAMPAIGN_ID_NETWORK AS CAMPAIGN_ID
-         , ADGROUP_NETWORK AS ADGROUP_NAME
-         , ADGROUP_ID_NETWORK AS ADGROUP_ID
-         , PLATFORM
-         , SUM(NETWORK_COST) AS COST
-         , SUM(CLICKS) AS CLICKS
-         , SUM(IMPRESSIONS) AS IMPRESSIONS
-         , SUM(INSTALLS) AS ADJUST_INSTALLS
-    FROM {{ ref('stg_adjust__report_daily') }}
-    WHERE DATE IS NOT NULL
+         , COALESCE(pm.AD_PARTNER, s.PARTNER_NAME) AS AD_PARTNER
+         , s.CAMPAIGN_NETWORK AS CAMPAIGN_NAME
+         , s.CAMPAIGN_ID_NETWORK AS CAMPAIGN_ID
+         , s.ADGROUP_NETWORK AS ADGROUP_NAME
+         , s.ADGROUP_ID_NETWORK AS ADGROUP_ID
+         , s.PLATFORM
+         , SUM(s.NETWORK_COST) AS COST
+         , SUM(s.CLICKS) AS CLICKS
+         , SUM(s.IMPRESSIONS) AS IMPRESSIONS
+         , SUM(s.INSTALLS) AS ADJUST_INSTALLS
+    FROM {{ ref('stg_adjust__report_daily') }} s
+    LEFT JOIN partner_map pm ON s.PARTNER_NAME = pm.PARTNER_NAME
+    WHERE s.DATE IS NOT NULL
     {% if is_incremental() %}
         -- 3-day lookback for late-arriving spend data
-        AND DATE >= DATEADD(day, -3, (SELECT MAX(DATE) FROM {{ this }}))
+        AND s.DATE >= DATEADD(day, -3, (SELECT MAX(DATE) FROM {{ this }}))
     {% endif %}
     GROUP BY 1, 2, 3, 4, 5, 6, 7
 )
