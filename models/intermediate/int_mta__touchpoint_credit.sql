@@ -11,7 +11,7 @@
 {{
     config(
         materialized='incremental',
-        unique_key=['DEVICE_ID', 'PLATFORM', 'TOUCHPOINT_TIMESTAMP', 'TOUCHPOINT_TYPE', 'NETWORK_NAME', 'INSTALL_TIMESTAMP'],
+        unique_key='JOURNEY_ROW_KEY',
         incremental_strategy='merge',
         on_schema_change='append_new_columns',
         tags=['mta', 'attribution']
@@ -58,7 +58,8 @@ WITH user_journey AS (
 
 -- Calculate all attribution credits
 , with_credits AS (
-    SELECT DEVICE_ID
+    SELECT JOURNEY_ROW_KEY
+         , DEVICE_ID
          , PLATFORM
          , TOUCHPOINT_TYPE
          , NETWORK_NAME
