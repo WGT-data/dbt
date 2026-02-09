@@ -26,7 +26,7 @@ WITH IOS_INSTALLS AS (
 )
 
 , ANDROID_INSTALLS AS (
-    SELECT GPS_ADID AS DEVICE_ID
+    SELECT UPPER(GPS_ADID) AS DEVICE_ID
          , NULL AS IDFA  -- Android doesn't have IDFA
          , 'Android' AS PLATFORM
          , NETWORK_NAME
