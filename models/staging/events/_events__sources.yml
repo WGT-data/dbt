@@ -1,0 +1,20 @@
+version: 2
+
+sources:
+  - name: events
+    description: WGT game event tables (pre-split by event type)
+    database: WGT
+    schema: EVENTS
+    tables:
+      - name: REVENUE
+        description: Revenue/purchase events with pre-parsed columns
+      - name: ROUNDSTARTED
+        description: Round started events, used for retention tracking
+      - name: ROUNDENDED
+        description: Round ended events
+      - name: BALLCONSUMED
+        description: Ball consumption events
+      - name: BALL_CONSUME_HISTORIC
+        description: Historic ball consumption events
+      - name: EVENT_HISTORY
+        description: General event history

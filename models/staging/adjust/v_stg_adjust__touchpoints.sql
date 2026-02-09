@@ -71,7 +71,7 @@ WITH ios_impressions AS (
 , android_impressions AS (
     SELECT UPPER(GPS_ADID) AS DEVICE_ID
          , NULL AS IDFA  -- Android doesn't have IDFA
-         , IP_ADDRESS
+         , NULL AS IP_ADDRESS  -- Android tables do not have IP_ADDRESS
          , 'Android' AS PLATFORM
          , 'impression' AS TOUCHPOINT_TYPE
          , NETWORK_NAME
@@ -83,7 +83,7 @@ WITH ios_impressions AS (
          , TO_TIMESTAMP(CREATED_AT) AS TOUCHPOINT_TIMESTAMP
          , CREATED_AT AS TOUCHPOINT_EPOCH
     FROM {{ source('adjust', 'ANDROID_ACTIVITY_IMPRESSION') }}
-    WHERE (GPS_ADID IS NOT NULL OR IP_ADDRESS IS NOT NULL)
+    WHERE GPS_ADID IS NOT NULL
       AND CREATED_AT IS NOT NULL
       AND CREATED_AT >= 1704067200  -- 2024-01-01 in epoch
     {% if is_incremental() %}
@@ -95,7 +95,7 @@ WITH ios_impressions AS (
 , android_clicks AS (
     SELECT UPPER(GPS_ADID) AS DEVICE_ID
          , NULL AS IDFA  -- Android doesn't have IDFA
-         , IP_ADDRESS
+         , NULL AS IP_ADDRESS  -- Android tables do not have IP_ADDRESS
          , 'Android' AS PLATFORM
          , 'click' AS TOUCHPOINT_TYPE
          , NETWORK_NAME
@@ -107,7 +107,7 @@ WITH ios_impressions AS (
          , TO_TIMESTAMP(CREATED_AT) AS TOUCHPOINT_TIMESTAMP
          , CREATED_AT AS TOUCHPOINT_EPOCH
     FROM {{ source('adjust', 'ANDROID_ACTIVITY_CLICK') }}
-    WHERE (GPS_ADID IS NOT NULL OR IP_ADDRESS IS NOT NULL)
+    WHERE GPS_ADID IS NOT NULL
       AND CREATED_AT IS NOT NULL
       AND CREATED_AT >= 1704067200  -- 2024-01-01 in epoch
     {% if is_incremental() %}

@@ -23,11 +23,13 @@ WITH INSTALLS AS (
 )
 
 , AMPLITUDE_EVENTS AS (
-    SELECT *
-    FROM {{ ref('v_stg_amplitude__events') }}
+    SELECT USER_ID
+         , EVENT_TYPE
+         , EVENT_PROPERTIES
+    FROM {{ source('amplitude', 'EVENTS_726530') }}
+    WHERE EVENT_TYPE = 'LevelUpCoinsRewarded'
     {% if is_incremental() %}
-        -- 3-day lookback to capture late-arriving event data
-        WHERE CAST(EVENT_TIME AS DATE) >= DATEADD(day, -3, (SELECT MAX(INSTALL_DATE) FROM {{ this }}))
+        AND CAST(EVENT_TIME AS DATE) >= DATEADD(day, -3, (SELECT MAX(INSTALL_DATE) FROM {{ this }}))
     {% endif %}
 )
 

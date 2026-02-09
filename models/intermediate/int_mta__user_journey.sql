@@ -3,10 +3,14 @@
 -- This is the foundation for multi-touch attribution calculations
 -- Grain: One row per device + touchpoint + install combination
 --
--- MATCHING STRATEGY (tiered by quality):
--- - iOS Tier 1: IDFA match (deterministic, ~11% of clicks when user consented)
--- - iOS Tier 2: IP match (probabilistic fallback)
+-- MATCHING STRATEGY (deterministic only, GDPR compliant):
+-- - iOS: IDFA match (deterministic, ATT-consented users only)
 -- - Android: Device ID match (GPS_ADID, deterministic)
+--
+-- NOTE: IP-based probabilistic matching for iOS was removed for GDPR compliance.
+-- IP addresses are personal data under GDPR and cannot be used for attribution
+-- without explicit consent. Analysis showed IP matching also produced unreliable
+-- data (median 270 touchpoints/journey, max 25,500 due to carrier NAT collisions).
 
 {{
     config(
@@ -32,7 +36,6 @@ WITH installs AS (
          , AD_PARTNER AS INSTALL_AD_PARTNER
          , CAMPAIGN_NAME AS INSTALL_CAMPAIGN_NAME
          , CAMPAIGN_ID AS INSTALL_CAMPAIGN_ID
-         , IP_ADDRESS
          , INSTALL_TIMESTAMP
          , INSTALL_EPOCH
     FROM {{ ref('v_stg_adjust__installs') }}
@@ -46,7 +49,6 @@ WITH installs AS (
 , touchpoints AS (
     SELECT DEVICE_ID
          , IDFA  -- For iOS deterministic matching when user consented
-         , IP_ADDRESS
          , PLATFORM
          , TOUCHPOINT_TYPE
          , NETWORK_NAME
@@ -65,12 +67,8 @@ WITH installs AS (
     {% endif %}
 )
 
--- iOS touchpoint matching - Tiered approach:
--- Tier 1: IDFA match (deterministic, ~11% of clicks have IDFA when user consented)
--- Tier 2: IP match (probabilistic fallback for remaining touchpoints)
-
--- Tier 1: iOS IDFA-based matching (deterministic, highest quality)
-, ios_idfa_matched AS (
+-- iOS touchpoint matching: IDFA only (deterministic, ATT-consented users)
+, ios_touchpoints_matched AS (
     SELECT i.DEVICE_ID
          , t.PLATFORM
          , t.TOUCHPOINT_TYPE
@@ -82,9 +80,6 @@ WITH installs AS (
          , t.ADGROUP_ID
          , t.CREATIVE_NAME
          , t.TOUCHPOINT_TIMESTAMP
-         , t.TOUCHPOINT_EPOCH
-         , t.IDFA AS TOUCHPOINT_IDFA
-         , t.IP_ADDRESS AS TOUCHPOINT_IP
          , i.INSTALL_TIMESTAMP
          , i.INSTALL_NETWORK
          , i.INSTALL_AD_PARTNER
@@ -103,68 +98,6 @@ WITH installs AS (
         AND t.TOUCHPOINT_EPOCH >= i.INSTALL_EPOCH - {{ lookback_window_seconds }}
     WHERE t.IDFA IS NOT NULL
       AND i.IDFA IS NOT NULL
-)
-
--- Tier 2: iOS IP-based matching (probabilistic fallback)
--- Only for touchpoints that did NOT match via IDFA
-, ios_ip_matched AS (
-    SELECT i.DEVICE_ID
-         , t.PLATFORM
-         , t.TOUCHPOINT_TYPE
-         , t.NETWORK_NAME
-         , t.AD_PARTNER
-         , t.CAMPAIGN_NAME
-         , t.CAMPAIGN_ID
-         , t.ADGROUP_NAME
-         , t.ADGROUP_ID
-         , t.CREATIVE_NAME
-         , t.TOUCHPOINT_TIMESTAMP
-         , t.TOUCHPOINT_EPOCH
-         , t.IDFA AS TOUCHPOINT_IDFA
-         , t.IP_ADDRESS AS TOUCHPOINT_IP
-         , i.INSTALL_TIMESTAMP
-         , i.INSTALL_NETWORK
-         , i.INSTALL_AD_PARTNER
-         , i.INSTALL_CAMPAIGN_ID
-         , DATEDIFF(hour, t.TOUCHPOINT_TIMESTAMP, i.INSTALL_TIMESTAMP) AS HOURS_TO_INSTALL
-         , DATEDIFF(day, t.TOUCHPOINT_TIMESTAMP, i.INSTALL_TIMESTAMP) AS DAYS_TO_INSTALL
-         , 'IP' AS MATCH_TYPE
-    FROM touchpoints t
-    INNER JOIN installs i
-        ON t.IP_ADDRESS = i.IP_ADDRESS  -- Probabilistic IP match
-        AND t.PLATFORM = 'iOS'
-        AND i.PLATFORM = 'iOS'
-        -- Touchpoint must be BEFORE install
-        AND t.TOUCHPOINT_EPOCH < i.INSTALL_EPOCH
-        -- Touchpoint must be within lookback window
-        AND t.TOUCHPOINT_EPOCH >= i.INSTALL_EPOCH - {{ lookback_window_seconds }}
-    WHERE t.IP_ADDRESS IS NOT NULL
-      AND i.IP_ADDRESS IS NOT NULL
-      -- Exclude touchpoints already matched via IDFA
-      AND NOT EXISTS (
-          SELECT 1 FROM ios_idfa_matched m
-          WHERE m.DEVICE_ID = i.DEVICE_ID
-            AND m.TOUCHPOINT_TIMESTAMP = t.TOUCHPOINT_TIMESTAMP
-            AND m.TOUCHPOINT_TYPE = t.TOUCHPOINT_TYPE
-            AND m.NETWORK_NAME = t.NETWORK_NAME
-      )
-)
-
--- Combine iOS tiers
-, ios_touchpoints_matched AS (
-    SELECT DEVICE_ID, PLATFORM, TOUCHPOINT_TYPE, NETWORK_NAME, AD_PARTNER
-         , CAMPAIGN_NAME, CAMPAIGN_ID, ADGROUP_NAME, ADGROUP_ID, CREATIVE_NAME
-         , TOUCHPOINT_TIMESTAMP, INSTALL_TIMESTAMP, INSTALL_NETWORK
-         , INSTALL_AD_PARTNER, INSTALL_CAMPAIGN_ID
-         , HOURS_TO_INSTALL, DAYS_TO_INSTALL, MATCH_TYPE
-    FROM ios_idfa_matched
-    UNION ALL
-    SELECT DEVICE_ID, PLATFORM, TOUCHPOINT_TYPE, NETWORK_NAME, AD_PARTNER
-         , CAMPAIGN_NAME, CAMPAIGN_ID, ADGROUP_NAME, ADGROUP_ID, CREATIVE_NAME
-         , TOUCHPOINT_TIMESTAMP, INSTALL_TIMESTAMP, INSTALL_NETWORK
-         , INSTALL_AD_PARTNER, INSTALL_CAMPAIGN_ID
-         , HOURS_TO_INSTALL, DAYS_TO_INSTALL, MATCH_TYPE
-    FROM ios_ip_matched
 )
 
 -- Android touchpoint matching via Device ID (deterministic)
@@ -259,7 +192,7 @@ SELECT DEVICE_ID
      , TOTAL_TOUCHPOINTS
      , IS_FIRST_TOUCH
      , IS_LAST_TOUCH
-     , MATCH_TYPE  -- IDFA (deterministic), IP (probabilistic), or DEVICE_ID (Android)
+     , MATCH_TYPE  -- IDFA (deterministic, iOS) or DEVICE_ID (deterministic, Android)
      -- Base weight: clicks are worth more than impressions
      , CASE
            WHEN TOUCHPOINT_TYPE = 'click' THEN {{ click_weight_multiplier }}

@@ -20,6 +20,7 @@ If the above database/schema paths fail, run these discovery queries first:
 Then adjust all queries to match what you find.
 
 # ======================================================================
+
 LAYER 1: STAGING VIEWS (validate these first)
 
 1A. v_stg_adjust__installs (built on IOS_ACTIVITY_INSTALL + ANDROID_ACTIVITY_INSTALL)
@@ -80,6 +81,7 @@ LIMIT 20;
 SELECT COUNT(*) FROM  WHERE DIVIDEND = 0;
 
 # ======================================================================
+
 LAYER 2: INTERMEDIATE MODELS
 
 2A. int_adjust_amplitude__device_mapping
@@ -163,12 +165,12 @@ SELECT DISTINCT D30_RETAINED FROM ;
 SELECT COUNT(*) AS VIOLATIONS
 FROM 
 WHERE D7_REVENUE > D30_REVENUE
-   OR D30_REVENUE > TOTAL_REVENUE;
+ OR D30_REVENUE > TOTAL_REVENUE;
 - Maturity flags: D7_MATURE = 1 only if install is 7+ days old, etc.
 SELECT COUNT(*) AS VIOLATIONS
 FROM 
 WHERE D7_MATURE = 1
-  AND DATEDIFF(day, INSTALL_DATE, CURRENT_DATE()) < 7;
+AND DATEDIFF(day, INSTALL_DATE, CURRENT_DATE()) < 7;
 
 2G. int_revenue__user_summary
 
@@ -176,6 +178,7 @@ WHERE D7_MATURE = 1
 - PURCHASE_COUNT should be >= 0
 
 # ======================================================================
+
 LAYER 3: MARTS
 
 3A. attribution__installs
@@ -237,6 +240,7 @@ FROM ;
 - facebook_conversions: verify no DIVIDEND = 0 rows made it through
 
 # ======================================================================
+
 OUTPUT FORMAT
 
 Create a validation report with these sections:
@@ -253,6 +257,7 @@ Save the full results to a markdown file in the project root called VALIDATION_R
 At the end, provide a summary: total models checked, total passes, total failures, and a ranked list of issues by severity.
 
 # ======================================================================
+
 SQL FORMAT
 
 Format all SQL like this:
@@ -266,6 +271,7 @@ GROUP BY F.DATE
      , G.CAMPAIGN
 
 # ======================================================================
+
 IMPORTANT NOTES
 
 - Use ONLY the snowflake-wgt MCP for queries. Do not use any other data warehouse connector.

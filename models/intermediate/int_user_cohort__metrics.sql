@@ -1,6 +1,6 @@
 -- int_user_cohort__metrics.sql
 -- Comprehensive user-level cohort metrics with revenue windows and retention flags
--- This model joins Adjust installs with Amplitude user data to calculate:
+-- This model joins Adjust installs with WGT.EVENTS data to calculate:
 -- - D7, D30, and lifetime revenue per user
 -- - D1, D7, D30 retention flags per user
 -- Grain: One row per user_id/platform combination
@@ -19,17 +19,8 @@
     on_schema_change='append_new_columns'
 ) }}
 
-WITH amplitude_events AS (
-    SELECT *
-    FROM {{ source('amplitude', 'EVENTS_726530') }}
-    {% if is_incremental() %}
-        -- Process events from last 35 days to capture D30 windows
-        WHERE SERVER_UPLOAD_TIME >= DATEADD(day, -35, CURRENT_TIMESTAMP())
-    {% endif %}
-)
-
 -- Get first install per user from device mapping
-, user_installs AS (
+WITH user_installs AS (
     SELECT
         dm.AMPLITUDE_USER_ID AS USER_ID
         , dm.PLATFORM
@@ -61,32 +52,35 @@ WITH amplitude_events AS (
     {% endif %}
 )
 
--- Revenue events with parsed revenue value
+-- Revenue events from WGT.EVENTS.REVENUE (pre-split table, no JSON parsing needed)
 , revenue_events AS (
     SELECT
-        USER_ID
-        , EVENT_TIME
+        USERID AS USER_ID
+        , EVENTTIME AS EVENT_TIME
         , PLATFORM
-        , COALESCE(
-            TRY_CAST(EVENT_PROPERTIES:"$revenue"::STRING AS FLOAT),
-            0
-        ) AS REVENUE
-        , COALESCE(EVENT_PROPERTIES:"tu"::STRING, 'unknown') AS REVENUE_TYPE
-    FROM amplitude_events
-    WHERE EVENT_TYPE = 'Revenue'
-    AND EVENT_PROPERTIES:"$revenue" IS NOT NULL
+        , COALESCE(REVENUE, 0) AS REVENUE
+        , COALESCE(REVENUETYPE, 'unknown') AS REVENUE_TYPE
+    FROM {{ source('events', 'REVENUE') }}
+    WHERE REVENUE IS NOT NULL
+        AND PLATFORM IN ('iOS', 'Android')
+    {% if is_incremental() %}
+        AND EVENTTIME >= DATEADD(day, -35, CURRENT_TIMESTAMP())
+    {% endif %}
 )
 
--- Session events for retention calculation
--- Using ClientOpened instead of session_start because session_start has USER_ID for only ~13% of events
--- ClientOpened has USER_ID for 100% of events and represents app opens
+-- Session events for retention calculation using WGT.EVENTS.ROUNDSTARTED
+-- Switched from Amplitude ClientOpened to ROUNDSTARTED to reduce Amplitude compute
 , session_events AS (
     SELECT
-        USER_ID
+        USERID AS USER_ID
         , PLATFORM
-        , DATE(EVENT_TIME) AS SESSION_DATE
-    FROM amplitude_events
-    WHERE EVENT_TYPE = 'ClientOpened'
+        , DATE(EVENTTIME) AS SESSION_DATE
+    FROM {{ source('events', 'ROUNDSTARTED') }}
+    WHERE USERID IS NOT NULL
+        AND PLATFORM IN ('iOS', 'Android')
+    {% if is_incremental() %}
+        AND EVENTTIME >= DATEADD(day, -35, CURRENT_TIMESTAMP())
+    {% endif %}
     GROUP BY 1, 2, 3
 )
 
@@ -115,7 +109,7 @@ WITH amplitude_events AS (
         -- Lifetime Total Revenue
         , SUM(COALESCE(r.REVENUE, 0)) AS TOTAL_REVENUE
 
-        -- Purchase Revenue (IAP, tu = 'direct')
+        -- Purchase Revenue (IAP, REVENUETYPE = 'direct')
         , SUM(CASE
             WHEN r.EVENT_TIME <= DATEADD(day, 7, u.INSTALL_TIME)
                 AND r.REVENUE_TYPE = 'direct'
@@ -136,7 +130,7 @@ WITH amplitude_events AS (
             ELSE 0
         END) AS TOTAL_PURCHASE_REVENUE
 
-        -- Ad Revenue (tu = 'indirect')
+        -- Ad Revenue (REVENUETYPE = 'indirect')
         , SUM(CASE
             WHEN r.EVENT_TIME <= DATEADD(day, 7, u.INSTALL_TIME)
                 AND r.REVENUE_TYPE = 'indirect'

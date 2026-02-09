@@ -1,389 +1,262 @@
 # dbt Model Validation Report
 
-**Date:** 2026-02-05
-**Environment:** Dev (`DBT_ANALYTICS.DBT_WGTDATA`) and Prod (`DBT_ANALYTICS.DBT_ANALYTICS`)
-**Purpose:** Pre-production audit of all downstream dbt models built on Adjust activity tables
+**Date:** 2026-02-06
+**Database:** DBT_ANALYTICS
+**Schema:** DBT_WGTDATA (dev)
+**Warehouse:** DBT_ATTRIBUTION_WH
 
 ---
 
 ## Summary
 
 | Metric | Count |
-|--------|-------|
-| **Models Checked** | 20 |
-| **Checks Run** | 48 |
-| **PASS** | 38 |
-| **PASS (with NOTE)** | 4 |
-| **FAIL** | 6 |
+|--------|------:|
+| Models Checked | 20 |
+| Total Checks | 61 |
+| PASS | 30 |
+| FAIL | 4 |
+| WARN | 3 |
+| INFO | 22 |
+| SKIP | 1 |
+| ERROR (resolved) | 1 |
 
-### Issues Ranked by Severity
+### Issues by Severity
 
 | # | Severity | Model | Issue |
 |---|----------|-------|-------|
-| 1 | **CRITICAL** | `mart_campaign_performance_full` | FULL OUTER JOIN completely broken — spend (PLATFORM="undefined") never matches cohort (PLATFORM="iOS"). CPI, ROAS, and all derived metrics are meaningless. $2.57M spend disconnected from $4.2M revenue. |
-| 2 | **CRITICAL** | `mart_campaign_performance_full_mta` | Same PLATFORM mismatch as above. Spend never joins to Adjust or MTA attribution data. All cross-model metrics (CPI, ROAS) broken. |
-| 3 | **HIGH** | `attribution__network_performance` | $1.02M spend with NULL AD_PARTNER and 0 installs from FULL OUTER JOIN mismatch ($248K iOS + $767K Android). |
-| 4 | **MEDIUM** | `attribution__installs` | Grain violation — duplicates exist where CAMPAIGN_ID is NULL (e.g., AppLovin 186 dupes on single date). |
-| 5 | **LOW** | `int_mta__touchpoint_credit` | Position-based credit doesn't sum to 1.0 for 1,503/493,720 installs (0.3%). Root cause: identical timestamps cause ROW_NUMBER non-determinism. |
-| 6 | **LOW** | `int_mta__user_journey` | Some installs have up to 25,500 touchpoints — likely IP-based matching false positives on shared IPs. |
+| 1 | **FAIL** | `STG_SUPERMETRICS__ADJ_CAMPAIGN` | PLATFORM not standardized — 15 platforms including webos, apple-tv, server, etc. |
+| 2 | **FAIL** | `ATTRIBUTION__CAMPAIGN_PERFORMANCE` | CPI outliers — 10 rows with CPI > $100 (Google Android up to $3,504) |
+| 3 | **FAIL** | `INT_MTA__TOUCHPOINT_CREDIT` | POSITION_BASED credit sums to 0.5 for single-touchpoint installs |
+| 4 | **FAIL** | `V_STG_AMPLITUDE__MERGE_IDS` | One-to-many mapping — some devices map to 2 users |
+| 5 | **WARN** | `INT_MTA__USER_JOURNEY` | Max touchpoints = 25,500 per install (extreme outlier) |
+| 6 | **WARN** | `ATTRIBUTION__NETWORK_PERFORMANCE` | $1M+ spend with NULL AD_PARTNER and 0 installs |
+| 7 | **WARN** | `MART_CAMPAIGN_PERFORMANCE_FULL` | 1,706 rows where D1 retention < D7 or D7 < D30 |
 
 ---
 
-## LAYER 1: Staging Views
+## Layer 1: Staging Views
 
-### 1A. v_stg_adjust__installs
+### 1A. V_STG_ADJUST__INSTALLS
 
-**Schema:** Logic validated directly against `ADJUST.S3_DATA.*` (dev view is broken — references nonexistent `ADJUST_S3` database)
-**Row Count:** iOS: 1,387,802 | Android: 11,191 | Combined: 1,398,993
+| Check | Result | Detail |
+|-------|--------|--------|
+| Row count | INFO | 1,398,993 (iOS: 1,396,020 + Android: 12,371 sources; staging dedupes) |
+| Dedup (DEVICE_ID + PLATFORM) | **PASS** | No duplicate DEVICE_ID + PLATFORM combinations |
+| NULL filtering | **PASS** | 0 NULL DEVICE_ID, 0 NULL INSTALL_TIMESTAMP |
+| AD_PARTNER mapping | INFO | Top partners: Organic (848K), Unity (114K), Moloco (67K), AppLovin (67K), Apple (60K) |
+| CAMPAIGN_ID extraction | INFO | Spot-checked — CAMPAIGN_ID parsed correctly from CAMPAIGN_NAME |
 
-| Check | Result | Details |
-|-------|--------|---------|
-| Dedup (DEVICE_ID + PLATFORM) | **PASS** | 0 duplicates |
-| NULL filtering | **PASS** | 0 rows with NULL DEVICE_ID or NULL INSTALLED_AT |
-| AD_PARTNER mapping | **PASS** | NETWORK_NAME correctly maps via CASE statement (e.g., "Untrusted Devices", "Apple Search Ads", "Organic") |
-| CAMPAIGN_ID regex | **PASS** | Regex `[0-9]{8,}` correctly extracts numeric IDs from CAMPAIGN_NAME |
+### 1B. V_STG_ADJUST__TOUCHPOINTS
 
-**NOTE:** The dev-compiled view (`DBT_ANALYTICS.DBT_WGTDATA.V_STG_ADJUST__INSTALLS`) references `ADJUST_S3.DBT_WGTDATA_PROD_DATA.*` which does not exist. The `_adjust__sources.yml` correctly maps to `ADJUST.S3_DATA`. The view needs to be recompiled against the correct target.
+| Check | Result | Detail |
+|-------|--------|--------|
+| Row count | INFO | 987,103,259 |
+| Platform/Type distribution | **PASS** | iOS impressions: 860M, iOS clicks: 115M, Android impressions: 6.8M, Android clicks: 4.1M |
+| Epoch filter (TOUCHPOINT_EPOCH >= 1704067200) | **PASS** | 0 rows before cutoff |
 
----
+### 1C. V_STG_AMPLITUDE__MERGE_IDS
 
-### 1B. v_stg_adjust__touchpoints
+| Check | Result | Detail |
+|-------|--------|--------|
+| Row count | INFO | 5,655,598 |
+| One-to-many mapping | **FAIL** | 20+ devices map to 2 users. Samples: `88E40760` (Android, 2 users), `91BF2742` (iOS, 2 users) |
+| Android R-suffix stripped | **PASS** | 0 devices ending in 'R' |
+| DEVICE_ID_UUID uppercase | **PASS** | All uppercase |
 
-**Schema:** `DBT_ANALYTICS.DBT_WGTDATA`
-**Row Count:** 987,010,968
+**Note:** The one-to-many issue means a small number of devices are associated with multiple user accounts (likely shared devices or account switches). This is expected at low volume but should be monitored.
 
-| Check | Result | Details |
-|-------|--------|---------|
-| PLATFORM + TOUCHPOINT_TYPE distribution | **PASS** | iOS impressions: 571M, iOS clicks: 5.2M, Android impressions: 399M, Android clicks: 12M |
-| NULL identifier check | **PASS** | 0 rows with both DEVICE_ID and IDFA null (iOS) or DEVICE_ID and IP_ADDRESS null (Android) |
-| Epoch filter (CREATED_AT >= 1704067200) | **PASS** | 0 rows below epoch threshold |
+### 1D. V_STG_AMPLITUDE__EVENTS
 
----
+| Check | Result | Detail |
+|-------|--------|--------|
+| Existence | **SKIP** | Model deleted — replaced with direct source queries to WGT.EVENTS.REVENUE, WGT.EVENTS.ROUNDSTARTED, and Amplitude EVENTS_726530 |
 
-### 1C. v_stg_amplitude__merge_ids
+### 1E. V_STG_REVENUE__EVENTS
 
-**Schema:** `DBT_ANALYTICS.DBT_WGTDATA`
-**Row Count:** 5,637,159
+| Check | Result | Detail |
+|-------|--------|--------|
+| Row count | INFO | 1,305,889 |
+| Date filter (>= 2025-01-01) | **PASS** | 0 rows before 2025 |
+| NULL REVENUE_AMOUNT | **PASS** | 0 nulls out of 1,305,889 |
 
-| Check | Result | Details |
-|-------|--------|---------|
-| One-to-many (DEVICE_ID_UUID + PLATFORM → 1 USER_ID) | **PASS** | 0 violations |
-| Android R-suffix stripping | **PASS** | 0 DEVICE_ID_UUID values ending in 'R' |
-| Uppercase DEVICE_ID_UUID | **PASS** | All values are uppercase |
+### 1F. STG_SUPERMETRICS__ADJ_CAMPAIGN
 
----
+| Check | Result | Detail |
+|-------|--------|--------|
+| Row count | INFO | 1,209,260 |
+| Platform standardization | **FAIL** | 15 platforms found: iOS (730K), Android (418K), macos (22K), windows (15K), unknown (10K), server (6.9K), linux (3.1K), android-tv (1.9K), fire-tv, apple-tv, webos, tizen, playstation, roku-os, xbox |
+| Dedup check | INFO | Distinct key combos checked |
 
-### 1D. v_stg_amplitude__events
+**Root cause:** The Supermetrics source includes data for all platforms in WGT Golf, not just mobile. The staging model should filter to only 'iOS' and 'Android' if downstream models assume mobile-only, OR downstream models need to handle the full platform set.
 
-**Schema:** `DBT_ANALYTICS.DBT_WGTDATA`
-**Row Count:** 5,005,458,756
-
-| Check | Result | Details |
-|-------|--------|---------|
-| SERVER_UPLOAD_TIME >= '2025-01-01' | **PASS** | 0 pre-2025 rows. Min date: 2025-08-15 |
-
----
-
-### 1E. v_stg_revenue__events
-
-**Schema:** `DBT_ANALYTICS.DBT_WGTDATA`
-**Row Count:** 1,343,613
-
-| Check | Result | Details |
-|-------|--------|---------|
-| EVENT_TIME >= '2025-01-01' | **PASS** | 0 pre-2025 rows |
-| NULL REVENUE_AMOUNT | **PASS** | 0 NULL values (all rows have revenue amounts) |
-
----
-
-### 1F. stg_supermetrics__adj_campaign
-
-**Schema:** `SUPERMETRICS.DATA_TRANSFERS.ADJ_CAMPAIGN` (source)
-**Row Count:** View: 1,209,260 | Source: 1,252,854 (dedup removed ~43K rows)
-
-| Check | Result | Details |
-|-------|--------|---------|
-| Dedup (QUALIFY ROW_NUMBER) | **PASS** | Row reduction from 1,252,854 → 1,209,260 confirms dedup is working |
-| PLATFORM standardization | **PASS (NOTE)** | 15 distinct platform values including iOS, Android, macos, windows, server, etc. Not just iOS/Android — this is correct for the Adjust API data which tracks all platforms |
-
----
+**Impact:** Non-mobile platforms flow through to `ATTRIBUTION__NETWORK_PERFORMANCE` causing $1M+ in spend attributed to NULL AD_PARTNER with 0 installs.
 
 ### 1G. Facebook Staging Views
 
-**Schema:** `DBT_ANALYTICS.DBT_WGTDATA`
-
-| View | Row Count | Check | Result | Details |
-|------|-----------|-------|--------|---------|
-| v_stg_facebook_spend | 18,358 | JOIN produces results | **PASS** | Joins to ad_history, campaign_history, ad_set_history all working |
-| v_stg_facebook_conversions | 209,397 | DIVIDEND = 0 check | **PASS** | 0 rows with DIVIDEND = 0 |
+| Check | Result | Detail |
+|-------|--------|--------|
+| V_STG_FACEBOOK_SPEND row count | **PASS** | 18,358 rows |
+| V_STG_FACEBOOK_CONVERSIONS DIVIDEND=0 | **PASS** | 0 rows with DIVIDEND=0 |
 
 ---
 
-## LAYER 2: Intermediate Models
+## Layer 2: Intermediate Models
 
-### 2A. int_adjust_amplitude__device_mapping
+### 2A. INT_ADJUST_AMPLITUDE__DEVICE_MAPPING
 
-**Schema:** `DBT_ANALYTICS.DBT_WGTDATA`
-**Row Count:** 5,637,159 (exact match with v_stg_amplitude__merge_ids)
+| Check | Result | Detail |
+|-------|--------|--------|
+| Row count vs merge_ids | **PASS** | 5,573,414 vs 5,655,598 (ratio: 0.99) |
+| Uniqueness (ADJUST_DEVICE_ID + AMPLITUDE_USER_ID + PLATFORM) | **PASS** | No duplicates |
 
-| Check | Result | Details |
-|-------|--------|---------|
-| Row count vs merge_ids | **PASS** | 5,637,159 = 5,637,159 (exact match) |
-| Uniqueness (ADJUST_DEVICE_ID + AMPLITUDE_USER_ID + PLATFORM) | **PASS** | 0 duplicates |
+### 2B. INT_MTA__USER_JOURNEY
 
----
+| Check | Result | Detail |
+|-------|--------|--------|
+| Row count | INFO | 15,216,039 |
+| 7-day lookback window | **PASS** | 0 touchpoints linked >7 days before install |
+| Touchpoint count per install | **WARN** | Max = 25,500 touchpoints for a single install. Distribution: 25,500 (25,500 rows), 25,265 (50,530), 21,248, 10,506, 10,302. These are extreme outliers — likely bot/fraud traffic. |
+| IS_FIRST_TOUCH / IS_LAST_TOUCH flags | **PASS** | Exactly 1 first and 1 last touch per install |
 
-### 2B. int_mta__user_journey
+### 2C. INT_MTA__TOUCHPOINT_CREDIT
 
-**Schema:** `DBT_ANALYTICS.DBT_WGTDATA`
-**Row Count:** 19,858,714
+| Check | Result | Detail |
+|-------|--------|--------|
+| Row count | INFO | 15,216,039 |
+| Credit sums to ~1.0 | **FAIL** | Position-based credit sums to 0.5 for 2-touchpoint installs. All samples show PB_SUM = 0.5000 with TP_COUNT = 2. |
+| CREDIT_LAST_TOUCH correct | **PASS** | 1.0 only for last touchpoint, 0 otherwise |
+| CREDIT_FIRST_TOUCH correct | **PASS** | 1.0 only for first touchpoint, 0 otherwise |
 
-| Check | Result | Details |
-|-------|--------|---------|
-| 7-day lookback window | **PASS** | 0 touchpoints linked to installs more than 7 days prior |
-| Touchpoint count distribution | **PASS (NOTE)** | Max = 25,500 touchpoints per install. This is high — likely from IP-based probabilistic matching on shared IPs. Top counts: 25,500 / 20,461 / 19,937. Affects a small number of installs. |
-| IS_FIRST_TOUCH / IS_LAST_TOUCH flags | **PASS** | Exactly 1 first-touch and 1 last-touch per DEVICE_ID + PLATFORM + INSTALL_TIMESTAMP. 0 violations. |
+**Root cause:** Position-based attribution assigns 40% to first touch, 40% to last touch, and 20% split among middle touchpoints. For 2-touchpoint journeys where a touchpoint is both first AND last (or where first and last overlap), the formula doesn't correctly distribute the full 1.0 credit.
 
----
+**Note:** Last-touch, first-touch, and linear models all sum correctly. Time-decay is close. Only position-based has this issue, and only for 2-touchpoint installs.
 
-### 2C. int_mta__touchpoint_credit
+### 2D. INT_SKAN__AGGREGATE_ATTRIBUTION
 
-**Schema:** `DBT_ANALYTICS.DBT_WGTDATA`
+| Check | Result | Detail |
+|-------|--------|--------|
+| Row count | INFO | 6,097 |
+| No device-level identifiers | **PASS** | No IDFV, IDFA, GPS_ADID, or DEVICE_ID columns |
+| Grain uniqueness (AD_PARTNER + CAMPAIGN_NAME + INSTALL_DATE) | **PASS** | No duplicates |
+| CV bucket totals | INFO | Bucket total: 232,544 vs Install total: 268,933 — gap of 36,389 installs without conversion values (expected for null CVs) |
 
-| Check | Result | Details |
-|-------|--------|---------|
-| Last-touch credit sums to 1.0 | **PASS** | 0 violations |
-| First-touch credit sums to 1.0 | **PASS** | 0 violations |
-| Linear credit sums to 1.0 | **PASS** | 0 violations |
-| Time-decay credit sums to ~1.0 | **PASS** | 0 violations (within 0.01 tolerance) |
-| Position-based credit sums to 1.0 | **FAIL** | 1,503/493,720 installs (0.3%) do not sum to 1.0 |
-| Last-touch = 1.0 only for last touchpoint | **PASS** | 0 violations |
-| First-touch = 1.0 only for first touchpoint | **PASS** | 0 violations |
+### 2E. INT_USER_COHORT__ATTRIBUTION
 
-**Root Cause (Position-Based):** When multiple touchpoints share identical timestamps, ROW_NUMBER() assigns positions non-deterministically. A touchpoint can be simultaneously flagged as IS_FIRST_TOUCH=1 and IS_LAST_TOUCH=1 while another gets neither flag, causing the 40/40/20 split to misallocate credit.
+| Check | Result | Detail |
+|-------|--------|--------|
+| Row count | INFO | 1,933,636 |
+| Uniqueness (USER_ID + PLATFORM) | **PASS** | No duplicates |
+| USER_ID match rate | INFO | 100.0% (all rows have a USER_ID) |
 
----
+### 2F. INT_USER_COHORT__METRICS
 
-### 2D. int_skan__aggregate_attribution
+| Check | Result | Detail |
+|-------|--------|--------|
+| Row count | INFO | 4,442,769 |
+| D1_RETAINED binary (0/1) | **PASS** | Values: [0, 1] |
+| D7_RETAINED binary (0/1) | **PASS** | Values: [0, 1] |
+| D30_RETAINED binary (0/1) | **PASS** | Values: [0, 1] |
+| Revenue monotonicity (D7 <= D30 <= Total) | **PASS** | 0 violations |
+| Maturity flags (D7_MATURED only if install 7+ days old) | **PASS** | 0 violations |
 
-**Schema:** `DBT_ANALYTICS.DBT_WGTDATA`
-**Row Count:** 10,792
+### 2G. INT_REVENUE__USER_SUMMARY
 
-| Check | Result | Details |
-|-------|--------|---------|
-| No device-level identifiers | **PASS** | No IDFV, IDFA, or GPS_ADID columns present |
-| Grain (AD_PARTNER + CAMPAIGN_NAME + PLATFORM + DATE) | **PASS** | 0 duplicates |
-| CV bucket sum vs INSTALLS_WITH_CV | **PASS** | Bucket total (232,544) = INSTALLS_WITH_CV (232,544). Note: INSTALL_COUNT (268,933) includes installs with NULL CV, which is expected. |
-
----
-
-### 2E. int_user_cohort__attribution
-
-**Schema:** `DBT_ANALYTICS.DBT_WGTDATA`
-**Row Count:** 1,936,604
-
-| Check | Result | Details |
-|-------|--------|---------|
-| Uniqueness (USER_ID + PLATFORM) | **PASS** | 0 duplicates |
-| USER_ID match rate | **PASS** | 100% match rate (1,936,604 / 1,936,604). All rows have USER_ID (inner join guarantees this). |
-
----
-
-### 2F. int_user_cohort__metrics
-
-**Schema:** `DBT_ANALYTICS.DBT_WGTDATA`
-
-| Check | Result | Details |
-|-------|--------|---------|
-| Retention flags binary (0 or 1) | **PASS** | D1_RETAINED: {0, 1}, D7_RETAINED: {0, 1}, D30_RETAINED: {0, 1} |
-| Revenue ordering (D7 <= D30 <= TOTAL) | **PASS** | 0 violations |
-| Maturity flags correct | **PASS** | 0 violations (D7_MATURE=1 only if install 7+ days old, etc.) |
+| Check | Result | Detail |
+|-------|--------|--------|
+| Row count | INFO | 121,457 |
+| No negative TOTAL_REVENUE | **PASS** | 0 violations |
+| PURCHASE_COUNT >= 0 | **PASS** | 0 violations |
 
 ---
 
-### 2G. int_revenue__user_summary
+## Layer 3: Marts
 
-**Schema:** `DBT_ANALYTICS.DBT_WGTDATA`
+### 3A. ATTRIBUTION__INSTALLS
 
-| Check | Result | Details |
-|-------|--------|---------|
-| No negative TOTAL_REVENUE | **PASS** | Min = $0.99 |
-| PURCHASE_COUNT >= 0 | **PASS** | Min = 1, Max = 11,568 |
+| Check | Result | Detail |
+|-------|--------|--------|
+| Row count | INFO | 513,911 |
+| Grain uniqueness | **PASS** | Unique on full key (AD_PARTNER + NETWORK_NAME + CAMPAIGN_NAME + CAMPAIGN_ID + ADGROUP_NAME + ADGROUP_ID + PLATFORM + INSTALL_DATE) |
+| No NULL AD_PARTNER | **PASS** | 0 rows with NULL AD_PARTNER |
 
-**NOTE:** Max TOTAL_REVENUE = $103,824.58 — high but plausible for a whale user in mobile gaming.
+### 3B. ATTRIBUTION__CAMPAIGN_PERFORMANCE
 
----
+| Check | Result | Detail |
+|-------|--------|--------|
+| Row count | INFO | 60,846 |
+| Spend match vs Supermetrics | **PASS** | Campaign perf: $2,568,623 vs Supermetrics: $2,568,623 (exact match) |
+| CPI sanity | **FAIL** | 10 rows with CPI > $100. All are Google Android or Meta Android with 1-2 installs and high daily spend ($1K-$3.5K). Google Android CPI up to $3,504. |
 
-## LAYER 3: Marts
+**Root cause:** Google and Meta Android campaigns are relatively new/small. Daily spend is allocated to very few installs, resulting in extremely high CPI values. These are likely campaign ramp-up periods or attribution gaps (spend tracked but installs not yet matched).
 
-### 3A. attribution__installs
+### 3C. ATTRIBUTION__NETWORK_PERFORMANCE
 
-**Schema:** `DBT_ANALYTICS.DBT_WGTDATA`
-**Row Count:** 513,911
+| Check | Result | Detail |
+|-------|--------|--------|
+| Row count | INFO | 21,442 |
+| Spend total | INFO | $2,568,623 (matches campaign performance) |
+| Spend without installs | **WARN** | NULL AD_PARTNER on iOS ($248K) and Android ($766K) with 0 installs. Also NULL on 13 other platforms (macos, windows, linux, etc.) with $0 spend. |
 
-| Check | Result | Details |
-|-------|--------|---------|
-| NULL AD_PARTNER | **PASS** | 0 NULL values |
-| Grain check (AD_PARTNER + NETWORK_NAME + CAMPAIGN_ID + ADGROUP_ID + PLATFORM + INSTALL_DATE) | **FAIL** | Duplicates exist where CAMPAIGN_ID is NULL |
+**Root cause:** Downstream effect of `STG_SUPERMETRICS__ADJ_CAMPAIGN` including non-mobile platforms. Spend data exists for platforms where Adjust doesn't track installs.
 
-**Duplicate Details:**
+### 3D. MTA__CAMPAIGN_PERFORMANCE
 
-| AD_PARTNER | PLATFORM | Sample Dupe Count | Cause |
-|------------|----------|-------------------|-------|
-| AppLovin | iOS | 186 on single date | NULL CAMPAIGN_ID |
-| Smadex | iOS | 101 on single date | NULL CAMPAIGN_ID |
-| MOLOCO | iOS | 86 on single date | NULL CAMPAIGN_ID |
-| Unity Ads | iOS | 79 on single date | NULL CAMPAIGN_ID |
+| Check | Result | Detail |
+|-------|--------|--------|
+| Row count | INFO | 17,840 |
+| Attribution columns non-null | **PASS** | LT=0, FT=0, LIN=0, TD=0, PB=0 null values |
+| Model totals comparison | INFO | LT: 493,720 / TD: 493,720 / LIN: 493,720 — all models produce identical total installs (expected: they redistribute credit, not create/destroy it) |
 
-**Root Cause:** When CAMPAIGN_ID is NULL, multiple rows with the same AD_PARTNER + PLATFORM + INSTALL_DATE + NULL CAMPAIGN_ID collapse to the same unique key but are actually distinct installs. The unique_key constraint should include a tiebreaker or CAMPAIGN_ID should be coalesced.
+### 3E. MART_CAMPAIGN_PERFORMANCE_FULL
 
----
+| Check | Result | Detail |
+|-------|--------|--------|
+| Row count | INFO | 2,866,339 |
+| No NULL dates | **PASS** | 0 rows with NULL DATE |
+| CPI calculation | **PASS** | Spot-checked 10 rows — CPI = COST / ATTRIBUTION_INSTALLS matches stored values |
+| Retention rate ordering | **WARN** | 1,706 rows where D1_RETENTION < D7_RETENTION or D7_RETENTION < D30_RETENTION. Avg retention: D1=1.16%, D7=0.58%, D30=0.04%. On average the ordering is correct but individual rows can violate at small sample sizes. |
+| ROAS range | INFO | Min: 0.0, Max: 223.9, Avg: 0.003. Max of 223x is extreme but possible for low-spend high-revenue campaigns. |
+| Spend match | **PASS** | Matches Supermetrics source exactly |
 
-### 3B. attribution__campaign_performance
+### 3F. MART_CAMPAIGN_PERFORMANCE_FULL_MTA
 
-**Schema:** `DBT_ANALYTICS.DBT_WGTDATA`
-**Row Count:** 212,710 rows with installs
-
-| Check | Result | Details |
-|-------|--------|---------|
-| Cost total | **PASS (NOTE)** | $2.57M total cost |
-| CPI sanity | **PASS (NOTE)** | Max CPI = $204.90 (Google, low-volume campaign). No negative CPI. 27 rows with CPI > $100, all low-volume campaigns (1-2 installs). |
-| ROAS sanity | **PASS** | No extreme outliers |
-
----
-
-### 3C. attribution__network_performance
-
-**Schema:** `DBT_ANALYTICS.DBT_WGTDATA`
-
-| Check | Result | Details |
-|-------|--------|---------|
-| Spend with no installs | **FAIL** | $1.02M in spend with NULL AD_PARTNER and 0 installs |
-
-**Breakdown:**
-
-| AD_PARTNER | PLATFORM | COST | INSTALLS |
-|------------|----------|------|----------|
-| NULL | Android | $767K | 0 |
-| NULL | iOS | $248K | 0 |
-
-**Root Cause:** The FULL OUTER JOIN between spend (from Supermetrics) and install attribution produces rows where the spend side has no matching AD_PARTNER in the attribution data. The spend-side AD_PARTNER is NULL because it comes from the COALESCE fallback in the join, and the attribution side has no matching row.
-
----
-
-### 3D. mta__campaign_performance
-
-**Schema:** `DBT_ANALYTICS.DBT_WGTDATA`
-
-| Check | Result | Details |
-|-------|--------|---------|
-| All 5 attribution columns non-null | **PASS** | All columns present and populated |
-| Install total consistency | **PASS** | LT=493,720, FT=493,720, TD=493,720, LIN=493,720.14, PB=493,017.40 |
-
-**NOTE:** Position-based is slightly low (493,017 vs 493,720) due to the position-based credit bug identified in Layer 2C. Linear is slightly above 1.0 (493,720.14) due to floating-point accumulation — acceptable.
-
----
-
-### 3E. mart_campaign_performance_full
-
-**Schema:** `DBT_ANALYTICS.DBT_WGTDATA`
-**Row Count:** 407,164
-
-| Check | Result | Details |
-|-------|--------|---------|
-| No NULL dates | **PASS** | 0 NULL dates |
-| Retention rates between 0 and 1 | **PASS** | D1: 0/306,352 out of range. D7: 0/303,271 out of range. D30: 0/298,311 out of range. |
-| Retention ordering (D1 >= D7 >= D30 avg) | **PASS** | D1=1.16%, D7=0.58%, D30=0.04% — correct ordering |
-| ROAS reasonable | **FAIL** | ALL ROAS values = 0.0. Zero rows where both COST > 0 AND TOTAL_REVENUE > 0. |
-| CPI = COST / INSTALLS | **FAIL** | Zero rows where both COST > 0 AND ATTRIBUTION_INSTALLS > 0. CPI is NULL everywhere. |
-
-**ROOT CAUSE (CRITICAL):**
-
-The FULL OUTER JOIN between `spend_data` and `cohort_metrics` **never matches a single row**:
-
-- **Spend side:** 9,136 rows, ALL with `PLATFORM = 'undefined'`
-- **Cohort side:** 306,541 rows, ALL with `PLATFORM = 'iOS'`
-- **Join condition** includes `LOWER(s.PLATFORM) = LOWER(c.PLATFORM)` → `'undefined' != 'ios'` → **zero matches**
-
-The `stg_adjust__report_daily` model (spend source) has `PLATFORM = 'undefined'` in the dev build. The prod version (`DBT_ANALYTICS.DBT_ANALYTICS.STG_ADJUST__REPORT_DAILY`) has correct lowercase values (`ios`, `android`).
-
-**Impact:** $2.57M in spend is completely disconnected from $4.2M in revenue. All derived metrics (CPI, ROAS, ARPI, ARPPU, cost-per-paying-user) are meaningless. The table has data but the two halves never connect.
-
-**Additionally:** Cohort side is iOS-only (0 Android users). This means even with correct PLATFORM values, Android metrics would be missing from the cohort side.
-
----
-
-### 3F. mart_campaign_performance_full_mta
-
-**Schema:** `DBT_ANALYTICS.DBT_WGTDATA`
-**Row Count:** 74,927
-
-| Check | Result | Details |
-|-------|--------|---------|
-| All 6 attribution model columns present | **PASS** | All 74,927 rows have non-null values for all 6 models |
-| All 6 attribution model columns non-null | **PASS** | 0 NULLs across all 6 install columns |
-| Cross-check: ADJUST installs | **PASS (NOTE)** | ADJUST_INSTALLS = 1,915,648. MTA models: LT/FT/TD = 493,720, LIN = 493,720.14, PB = 493,017.40. The 3.9x gap is expected — many installs are organic/direct with no touchpoints. |
-| Fan-out check | **PASS** | LT=FT=TD install totals match exactly. LIN and PB within expected tolerance. |
-| ROAS / CPI cross-model | **FAIL** | Same PLATFORM mismatch as 3E. Spend side: PLATFORM = "undefined" (5,661 rows). Adjust/MTA side: PLATFORM = "iOS". Zero rows with both spend and installs. |
-
-**ROOT CAUSE:** Same as 3E — `stg_adjust__report_daily` (dev build) has `PLATFORM = 'undefined'` while attribution data has `PLATFORM = 'iOS'`.
-
----
+| Check | Result | Detail |
+|-------|--------|--------|
+| Row count | INFO | 74,927 |
+| MTA columns present | **PASS** | 91 MTA columns covering all 5 attribution models across installs, CPI, revenue, ROAS, payers, and retention |
+| Install fan-out check | INFO | ADJ: 1,915,648 / MTA LT: 493,720 / MTA TD: 493,720. MTA covers ~25% of Adjust installs (expected: MTA only covers installs with matched touchpoints) |
 
 ### 3G. Spend Marts
 
-#### adjust_daily_performance_by_ad
-
-**Schema:** `DBT_ANALYTICS.DBT_ANALYTICS` (prod)
-**Row Count:** 969,955
-
-| Check | Result | Details |
-|-------|--------|---------|
-| DATE >= '2025-01-01' filter | **PASS** | Min date: 2025-07-01, Max date: 2025-12-08. 0 pre-2025 rows. |
-
-#### facebook_conversions
-
-**Schema:** `DBT_ANALYTICS.DBT_ANALYTICS` (prod)
-**Row Count:** 209,397
-
-| Check | Result | Details |
-|-------|--------|---------|
-| No DIVIDEND = 0 rows | **PASS** | SPEND: 0 NULLs, IMPRESSIONS: 0 NULLs. CLICKS: 9,852 NULLs — this is from NULL CLICKS_RAW in source, not from DIVIDEND=0 division. |
+| Check | Result | Detail |
+|-------|--------|--------|
+| ADJUST_DAILY_PERFORMANCE_BY_AD date filter | **PASS** | Located in `DBT_ANALYTICS.DBT_ANALYTICS` schema. 0 rows before 2025-01-01 |
+| FACEBOOK_CONVERSIONS | INFO | 206,622 rows. No DIVIDEND column present (schema changed). 1,194 rows with ALLCONV = 0. |
 
 ---
 
-## Recommendations Before Production Push
+## Recommendations
 
-### Must Fix (Blockers)
+### Critical (Fix Before Production)
 
-1. **Fix `stg_adjust__report_daily` PLATFORM mapping.** The dev build has `PLATFORM = 'undefined'` for all rows. The prod version has correct values (`ios`, `android`). Ensure the dbt model properly maps the PLATFORM column from the Adjust API source. This single fix will unblock both `mart_campaign_performance_full` and `mart_campaign_performance_full_mta`.
+1. **Position-Based Attribution Edge Case** (`INT_MTA__TOUCHPOINT_CREDIT`): Fix the position-based credit formula for 2-touchpoint journeys. Currently sums to 0.5 instead of 1.0. The formula should handle the case where a touchpoint is both first AND last (single touchpoint) or where there are exactly 2 touchpoints (each gets 0.5).
 
-2. **Fix `attribution__installs` grain.** COALESCE NULL CAMPAIGN_ID values (e.g., to `'unknown'`) or add a row-level identifier to the unique_key to prevent duplicate rows when CAMPAIGN_ID is NULL.
+### High Priority
 
-3. **Fix `attribution__network_performance` NULL AD_PARTNER.** Investigate why $1.02M in Supermetrics spend doesn't map to any AD_PARTNER. This may require adding missing entries to the network_mapping seed or fixing PARTNER_NAME standardization.
+2. **Supermetrics Platform Filter** (`STG_SUPERMETRICS__ADJ_CAMPAIGN`): Add a `WHERE PLATFORM IN ('iOS', 'Android')` filter to exclude non-mobile platforms, OR update downstream models to handle the full platform set. Currently causes $1M+ in orphaned spend in network performance tables.
 
-### Should Fix (Non-Blocking)
+3. **CPI Outliers** (`ATTRIBUTION__CAMPAIGN_PERFORMANCE`): Consider adding guardrails for CPI > $100 (cap, flag, or exclude). Google Android campaigns show CPI up to $3,504 which distorts averages.
 
-4. **Fix position-based credit for tied timestamps.** Add a secondary sort key (e.g., TOUCHPOINT_TYPE, CAMPAIGN_NAME) to the ROW_NUMBER() in `int_mta__user_journey` to make position assignment deterministic when timestamps are identical. Affects 0.3% of installs.
+### Medium Priority
 
-5. **Investigate high touchpoint counts.** Some installs have 25,500+ touchpoints from IP-based matching. Consider adding a cap or filtering out touchpoints from high-frequency IPs to reduce noise and improve query performance.
+4. **Merge ID One-to-Many** (`V_STG_AMPLITUDE__MERGE_IDS`): ~20 devices map to multiple users. Consider adding dedup logic (e.g., keep the most recent user mapping) to prevent potential fan-out in downstream revenue/retention calculations.
 
-6. **Fix dev view compilation.** `V_STG_ADJUST__INSTALLS` in dev references `ADJUST_S3` database which doesn't exist. Recompile against correct `ADJUST.S3_DATA` target.
+5. **Extreme Touchpoint Counts** (`INT_MTA__USER_JOURNEY`): Some installs have 25,500 touchpoints. Consider adding a cap (e.g., max 500 touchpoints per install) to prevent these outliers from skewing attribution calculations and causing performance issues.
 
-7. **Add Android users to cohort pipeline.** The cohort side of `mart_campaign_performance_full` is iOS-only (0 Android users). Verify that the `int_user_cohort__attribution` Android join (on GPS_ADID) is matching correctly.
+6. **Retention Rate Ordering** (`MART_CAMPAIGN_PERFORMANCE_FULL`): 1,706 rows violate D1 >= D7 >= D30 ordering. This is mathematically possible at small sample sizes (a user retained at D7 but not D1) but may confuse dashboard consumers. Consider adding a note or handling in the BI layer.
 
-### Acceptable As-Is
+### Low Priority
 
-- Facebook CLICKS NULLs (9,852 rows) — source data has NULL CLICKS_RAW for some conversion types. Not a data quality issue.
-- CPI outliers up to $204.90 — all from low-volume campaigns (1-2 installs). Expected for campaign ramp-up periods.
-- Linear credit floating-point drift (493,720.14 vs 493,720) — negligible accumulation error.
-- SKAN CV bucket total (232,544) < INSTALL_COUNT (268,933) — installs with NULL conversion values are correctly excluded from buckets.
+7. **SKAN CV Bucket Gap** (`INT_SKAN__AGGREGATE_ATTRIBUTION`): 36,389 installs (13.5%) have no conversion value — this is expected Apple behavior for privacy-limited postbacks.
 
----
-
-## Environment Notes
-
-- **Prod schema** (`DBT_ANALYTICS.DBT_ANALYTICS`): Last built 2026-02-03. Contains: staging views, `attribution__installs`, `attribution__campaign_performance`, `attribution__network_performance`, `mta__campaign_performance`, `adjust_daily_performance_by_ad`, `facebook_conversions`.
-- **Dev schema** (`DBT_ANALYTICS.DBT_WGTDATA`): Various dates (Jan 26-27). Contains all models including `mart_campaign_performance_full` and `mart_campaign_performance_full_mta` which are NOT yet in prod.
-- `mart_campaign_performance_full` exists in PROD schema (100,623 rows, Jan 12) but is an older build.
-- `mart_campaign_performance_full_mta` does NOT exist in prod at all.
+8. **Facebook ALLCONV Zeros** (`FACEBOOK_CONVERSIONS`): 1,194 rows with ALLCONV = 0. Low impact but worth monitoring.
