@@ -12,7 +12,7 @@
 
 {{ config(
     materialized='incremental',
-    unique_key=['PARTNER', 'CAMPAIGN_NAME', 'INSTALL_DATE'],
+    unique_key=['SKAN_PARTNER', 'CAMPAIGN_NAME', 'INSTALL_DATE'],
     incremental_strategy='merge',
     tags=['skan', 'attribution', 'aggregate'],
     on_schema_change='append_new_columns'

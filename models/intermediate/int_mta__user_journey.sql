@@ -15,7 +15,7 @@
 {{
     config(
         materialized='incremental',
-        unique_key=['DEVICE_ID', 'PLATFORM', 'TOUCHPOINT_TIMESTAMP', 'TOUCHPOINT_TYPE', 'NETWORK_NAME', 'INSTALL_TIMESTAMP'],
+        unique_key='JOURNEY_ROW_KEY',
         incremental_strategy='merge',
         on_schema_change='append_new_columns',
         tags=['mta', 'attribution']
@@ -170,6 +170,24 @@ WITH installs AS (
     FROM touchpoints_with_install
 )
 
+, journey_deduped AS (
+    SELECT *
+    FROM journey_with_position
+    QUALIFY ROW_NUMBER() OVER (
+        PARTITION BY DEVICE_ID
+                   , PLATFORM
+                   , TOUCHPOINT_TIMESTAMP
+                   , TOUCHPOINT_TYPE
+                   , COALESCE(NETWORK_NAME, '')
+                   , INSTALL_TIMESTAMP
+                   , COALESCE(CAMPAIGN_ID, '')
+                   , COALESCE(ADGROUP_ID, '')
+                   , COALESCE(CREATIVE_NAME, '')
+                   , MATCH_TYPE
+        ORDER BY TOUCHPOINT_TIMESTAMP DESC
+    ) = 1
+)
+
 SELECT DEVICE_ID
      , PLATFORM
      , TOUCHPOINT_TYPE
@@ -193,9 +211,23 @@ SELECT DEVICE_ID
      , IS_FIRST_TOUCH
      , IS_LAST_TOUCH
      , MATCH_TYPE  -- IDFA (deterministic, iOS) or DEVICE_ID (deterministic, Android)
+     , MD5(
+         CONCAT(
+             COALESCE(DEVICE_ID, '')
+             , '||', COALESCE(PLATFORM, '')
+             , '||', COALESCE(TOUCHPOINT_TYPE, '')
+             , '||', COALESCE(NETWORK_NAME, '')
+             , '||', COALESCE(TO_VARCHAR(TOUCHPOINT_TIMESTAMP), '')
+             , '||', COALESCE(TO_VARCHAR(INSTALL_TIMESTAMP), '')
+             , '||', COALESCE(CAMPAIGN_ID, '')
+             , '||', COALESCE(ADGROUP_ID, '')
+             , '||', COALESCE(CREATIVE_NAME, '')
+             , '||', COALESCE(MATCH_TYPE, '')
+         )
+       ) AS JOURNEY_ROW_KEY
      -- Base weight: clicks are worth more than impressions
      , CASE
            WHEN TOUCHPOINT_TYPE = 'click' THEN {{ click_weight_multiplier }}
            ELSE 1.0
        END AS BASE_TYPE_WEIGHT
-FROM journey_with_position
+FROM journey_deduped
