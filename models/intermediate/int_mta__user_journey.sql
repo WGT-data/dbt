@@ -139,7 +139,26 @@ WITH installs AS (
     SELECT * FROM android_touchpoints_matched
 )
 
--- Calculate touchpoint position in the journey
+-- Deduplicate before calculating positions so counts and flags are accurate
+, journey_deduped AS (
+    SELECT *
+    FROM touchpoints_with_install
+    QUALIFY ROW_NUMBER() OVER (
+        PARTITION BY DEVICE_ID
+                   , PLATFORM
+                   , TOUCHPOINT_TIMESTAMP
+                   , TOUCHPOINT_TYPE
+                   , COALESCE(NETWORK_NAME, '')
+                   , INSTALL_TIMESTAMP
+                   , COALESCE(CAMPAIGN_ID, '')
+                   , COALESCE(ADGROUP_ID, '')
+                   , COALESCE(CREATIVE_NAME, '')
+                   , MATCH_TYPE
+        ORDER BY TOUCHPOINT_TIMESTAMP DESC
+    ) = 1
+)
+
+-- Calculate touchpoint position in the journey (after dedup)
 , journey_with_position AS (
     SELECT *
          -- Position from first touchpoint (1 = first)
@@ -167,25 +186,7 @@ WITH installs AS (
                PARTITION BY DEVICE_ID, PLATFORM, INSTALL_TIMESTAMP
                ORDER BY TOUCHPOINT_TIMESTAMP DESC, TOUCHPOINT_TYPE ASC, NETWORK_NAME DESC, CAMPAIGN_NAME DESC
            ) = 1 THEN 1 ELSE 0 END AS IS_LAST_TOUCH
-    FROM touchpoints_with_install
-)
-
-, journey_deduped AS (
-    SELECT *
-    FROM journey_with_position
-    QUALIFY ROW_NUMBER() OVER (
-        PARTITION BY DEVICE_ID
-                   , PLATFORM
-                   , TOUCHPOINT_TIMESTAMP
-                   , TOUCHPOINT_TYPE
-                   , COALESCE(NETWORK_NAME, '')
-                   , INSTALL_TIMESTAMP
-                   , COALESCE(CAMPAIGN_ID, '')
-                   , COALESCE(ADGROUP_ID, '')
-                   , COALESCE(CREATIVE_NAME, '')
-                   , MATCH_TYPE
-        ORDER BY TOUCHPOINT_TIMESTAMP DESC
-    ) = 1
+    FROM journey_deduped
 )
 
 SELECT DEVICE_ID
@@ -230,4 +231,4 @@ SELECT DEVICE_ID
            WHEN TOUCHPOINT_TYPE = 'click' THEN {{ click_weight_multiplier }}
            ELSE 1.0
        END AS BASE_TYPE_WEIGHT
-FROM journey_deduped
+FROM journey_with_position
