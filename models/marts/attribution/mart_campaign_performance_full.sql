@@ -14,9 +14,20 @@
 ) }}
 
 -- Map spend partner names to canonical AD_PARTNER names
+-- stg_adjust__report_daily uses Adjust network names and "(Ad Spend)" suffixed names
 WITH partner_map AS (
+    -- Map Adjust network names (e.g., "Facebook Installs" → "Meta")
     SELECT DISTINCT
-        SUPERMETRICS_PARTNER_NAME AS PARTNER_NAME
+        ADJUST_NETWORK_NAME AS PARTNER_NAME
+        , AD_PARTNER
+    FROM {{ ref('network_mapping') }}
+    WHERE AD_PARTNER IS NOT NULL
+
+    UNION
+
+    -- Map "(Ad Spend)" suffixed names (e.g., "Facebook (Ad Spend)" → "Meta")
+    SELECT DISTINCT
+        SUPERMETRICS_PARTNER_NAME || ' (Ad Spend)' AS PARTNER_NAME
         , AD_PARTNER
     FROM {{ ref('network_mapping') }}
     WHERE AD_PARTNER IS NOT NULL
