@@ -13,17 +13,17 @@
 
     {%- if custom_schema_name is not none and custom_schema_name | trim | upper == 'S3_DATA' -%}
         {# Adjust activity models go to S3_DATA or DEV_S3_DATA #}
-        {%- if target.name == 'prod' -%}
-            S3_DATA
-        {%- else -%}
+        {%- if target.name == 'dev' -%}
             DEV_S3_DATA
+        {%- else -%}
+            S3_DATA
         {%- endif -%}
     {%- else -%}
         {# Everything else goes to DBT_WGTDATA (dev) or PROD (prod) #}
-        {%- if target.name == 'prod' -%}
-            PROD
-        {%- else -%}
+        {%- if target.name == 'dev' -%}
             DBT_WGTDATA
+        {%- else -%}
+            PROD
         {%- endif -%}
     {%- endif -%}
 
