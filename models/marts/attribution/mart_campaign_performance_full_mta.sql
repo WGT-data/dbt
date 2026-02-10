@@ -24,12 +24,22 @@
 ) }}
 
 -- =============================================
--- SPEND DATA (from Supermetrics/Adjust Network API)
+-- SPEND DATA (from Adjust API REPORT_DAILY)
 -- Aggregated to campaign level
 -- =============================================
 WITH partner_map AS (
+    -- Map Adjust network names (e.g., "Facebook Installs" → "Meta")
     SELECT DISTINCT
-        SUPERMETRICS_PARTNER_NAME AS PARTNER_NAME
+        ADJUST_NETWORK_NAME AS PARTNER_NAME
+        , AD_PARTNER
+    FROM {{ ref('network_mapping') }}
+    WHERE AD_PARTNER IS NOT NULL
+
+    UNION
+
+    -- Map "(Ad Spend)" suffixed names (e.g., "Facebook (Ad Spend)" → "Meta")
+    SELECT DISTINCT
+        SUPERMETRICS_PARTNER_NAME || ' (Ad Spend)' AS PARTNER_NAME
         , AD_PARTNER
     FROM {{ ref('network_mapping') }}
     WHERE AD_PARTNER IS NOT NULL
@@ -37,19 +47,19 @@ WITH partner_map AS (
 
 , spend_data AS (
     SELECT
-        DATE
+        s.DATE
         , COALESCE(pm.AD_PARTNER, s.PARTNER_NAME) AS AD_PARTNER
-        , CAMPAIGN_NETWORK AS CAMPAIGN_NAME
-        , PLATFORM
-        , SUM(COST) AS COST
-        , SUM(CLICKS) AS CLICKS
-        , SUM(IMPRESSIONS) AS IMPRESSIONS
-        , SUM(INSTALLS) AS ADJUST_NETWORK_INSTALLS
-    FROM {{ ref('stg_supermetrics__adj_campaign') }} s
+        , s.CAMPAIGN_NETWORK AS CAMPAIGN_NAME
+        , s.PLATFORM
+        , SUM(s.NETWORK_COST) AS COST
+        , SUM(s.CLICKS) AS CLICKS
+        , SUM(s.IMPRESSIONS) AS IMPRESSIONS
+        , SUM(s.INSTALLS) AS ADJUST_NETWORK_INSTALLS
+    FROM {{ ref('stg_adjust__report_daily') }} s
     LEFT JOIN partner_map pm ON s.PARTNER_NAME = pm.PARTNER_NAME
-    WHERE DATE IS NOT NULL
+    WHERE s.DATE IS NOT NULL
     {% if is_incremental() %}
-        AND DATE >= DATEADD(day, -3, (SELECT MAX(DATE) FROM {{ this }}))
+        AND s.DATE >= DATEADD(day, -3, (SELECT MAX(DATE) FROM {{ this }}))
     {% endif %}
     GROUP BY 1, 2, 3, 4
 )
