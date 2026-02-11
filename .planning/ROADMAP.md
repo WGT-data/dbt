@@ -46,10 +46,11 @@ Plans:
   2. Baseline match rate metrics exist for Android GPS_ADID, iOS IDFA, and iOS IP-based mapping before any code changes
   3. iOS ATT limitations are documented with stakeholder-facing explanation of why 1.4% IDFA match rate is structural, not a bug
   4. Device ID normalization strategy document exists with concrete examples of transformations needed
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] TBD (set during planning)
+- [ ] 02-01-PLAN.md — Write SQL audit queries for device ID format profiling and baseline match rates
+- [ ] 02-02-PLAN.md — Run audit queries, document findings, write iOS ATT stakeholder doc and normalization strategy
 
 ### Phase 3: Device ID Normalization Fix
 **Goal**: Fix broken Android GPS_ADID normalization with full-refresh strategy that preserves D30 cohort windows
@@ -116,7 +117,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Test Foundation | 0/2 | Planning complete | - |
-| 2. Device ID Audit | 0/TBD | Not started | - |
+| 2. Device ID Audit | 0/2 | Planning complete | - |
 | 3. Device ID Normalization Fix | 0/TBD | Not started | - |
 | 4. DRY Refactor | 0/TBD | Not started | - |
 | 5. Expand Test Coverage | 0/TBD | Not started | - |
