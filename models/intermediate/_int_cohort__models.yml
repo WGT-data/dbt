@@ -1,0 +1,98 @@
+version: 2
+
+models:
+  - name: int_user_cohort__attribution
+    description: |
+      Links users to their install attribution source (network, campaign, adgroup).
+      Foundation table for user-level acquisition reporting.
+
+      Grain: One row per user_id/platform combination
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - USER_ID
+            - PLATFORM
+          config:
+            where: "INSTALL_TIME >= DATEADD(day, -60, CURRENT_DATE)"
+    columns:
+      - name: USER_ID
+        description: Amplitude user ID (integer)
+        data_tests:
+          - not_null:
+              config:
+                where: "INSTALL_TIME >= DATEADD(day, -60, CURRENT_DATE)"
+      - name: PLATFORM
+        description: iOS or Android
+        data_tests:
+          - not_null:
+              config:
+                where: "INSTALL_TIME >= DATEADD(day, -60, CURRENT_DATE)"
+          - accepted_values:
+              config:
+                values: ['iOS', 'Android']
+                where: "INSTALL_TIME >= DATEADD(day, -60, CURRENT_DATE)"
+      - name: ADJUST_DEVICE_ID
+        description: Adjust device identifier (IDFV for iOS, GPS_ADID for Android)
+      - name: AD_PARTNER
+        description: Standardized partner name from network_mapping
+      - name: NETWORK_NAME
+        description: Raw network name from Adjust
+      - name: CAMPAIGN_NAME
+        description: Campaign name from Adjust
+      - name: INSTALL_TIME
+        description: Install timestamp
+      - name: INSTALL_DATE
+        description: Install date
+
+  - name: int_user_cohort__metrics
+    description: |
+      Comprehensive user-level cohort metrics with revenue windows and retention flags.
+      Joins Adjust installs with WGT.EVENTS data to calculate D7, D30, and lifetime revenue per user.
+
+      Grain: One row per user_id/platform combination
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - USER_ID
+            - PLATFORM
+          config:
+            where: "INSTALL_TIME >= DATEADD(day, -60, CURRENT_DATE)"
+    columns:
+      - name: USER_ID
+        description: Amplitude user ID (integer)
+        data_tests:
+          - not_null:
+              config:
+                where: "INSTALL_TIME >= DATEADD(day, -60, CURRENT_DATE)"
+      - name: PLATFORM
+        description: iOS or Android
+        data_tests:
+          - not_null:
+              config:
+                where: "INSTALL_TIME >= DATEADD(day, -60, CURRENT_DATE)"
+          - accepted_values:
+              config:
+                values: ['iOS', 'Android']
+                where: "INSTALL_TIME >= DATEADD(day, -60, CURRENT_DATE)"
+      - name: INSTALL_DATE
+        description: Install date
+      - name: INSTALL_TIME
+        description: Install timestamp
+      - name: D7_REVENUE
+        description: Total revenue within 7 days of install
+      - name: D30_REVENUE
+        description: Total revenue within 30 days of install
+      - name: TOTAL_REVENUE
+        description: Lifetime total revenue
+      - name: IS_D7_PAYER
+        description: 1 if user made a purchase within 7 days, 0 otherwise
+      - name: IS_D30_PAYER
+        description: 1 if user made a purchase within 30 days, 0 otherwise
+      - name: IS_PAYER
+        description: 1 if user ever made a purchase, 0 otherwise
+      - name: D1_RETAINED
+        description: 1 if user had a session on D1, 0 otherwise
+      - name: D7_RETAINED
+        description: 1 if user had a session on D7, 0 otherwise
+      - name: D30_RETAINED
+        description: 1 if user had a session on D30, 0 otherwise

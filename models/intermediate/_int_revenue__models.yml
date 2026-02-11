@@ -1,0 +1,21 @@
+version: 2
+
+models:
+  - name: int_revenue__user_summary
+    description: |
+      Aggregates all-time revenue per user.
+      Re-aggregates all data for users with recent revenue activity.
+
+      Note: This model has no PLATFORM column (aggregates across all platforms for a user).
+
+      Grain: One row per user_id
+    columns:
+      - name: USER_ID
+        description: Amplitude user ID (integer)
+        data_tests:
+          - unique
+          - not_null
+      - name: PURCHASE_COUNT
+        description: Total number of purchase events for this user
+      - name: TOTAL_REVENUE
+        description: Lifetime total revenue for this user
