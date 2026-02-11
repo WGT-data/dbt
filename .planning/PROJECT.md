@@ -10,15 +10,17 @@ Accurately attribute user acquisition spend to downstream revenue by connecting 
 
 ## Current Milestone: v1.0 Data Integrity
 
-**Goal:** Fix the broken device mapping between Adjust and Amplitude so MTA revenue actually works, and add foundational data quality guardrails across the project.
+**Goal:** Establish data quality guardrails, document MTA limitations, build MMM data foundation, and harden the pipeline for production reliability.
 
 **Target features:**
-- Investigate and fix Android device ID mapping (GPS_ADID doesn't match Amplitude device_id)
-- Investigate and improve iOS MTA touchpoint-to-Amplitude match rate (currently 1.4%)
-- Add uniqueness and not-null tests for all model grain definitions
-- Add source freshness checks for Adjust, Amplitude, Supermetrics pipelines
-- Refactor duplicated AD_PARTNER mapping logic into a centralized macro or seed
-- Centralize device ID normalization at the staging layer
+- [x] Investigate device ID mapping — Android 0% match (structural), iOS IDFV 69.78% (working)
+- [x] Document MTA limitations with stakeholder-facing explanation
+- [x] Build MMM aggregate models (spend, installs, revenue → daily/weekly summaries)
+- [x] Add uniqueness and not-null tests for all model grain definitions
+- [ ] Validate and harden MMM pipeline in dbt Cloud (compile, run, incremental behavior)
+- [ ] Add source freshness checks for Adjust, Amplitude, Supermetrics pipelines
+- [ ] Refactor duplicated AD_PARTNER mapping logic into a centralized macro
+- [ ] Expand test coverage with MMM-specific singular tests
 
 ## Requirements
 
@@ -38,19 +40,19 @@ Accurately attribute user acquisition spend to downstream revenue by connecting 
 
 <!-- Current scope. Building toward these. -->
 
-- [ ] Fix Android device mapping between Adjust and Amplitude
-- [ ] Improve iOS MTA touchpoint mapping rate
-- [ ] Add dbt uniqueness and not-null tests
-- [ ] Add source freshness checks
-- [ ] Refactor duplicated AD_PARTNER mapping logic
-- [ ] Centralize device ID normalization
+- [ ] Validate and harden MMM pipeline in dbt Cloud
+- [ ] Ensure network mapping seed covers all active partners
+- [ ] Add source freshness checks for all data sources
+- [ ] Extract AD_PARTNER CASE statement into reusable macro
+- [ ] Add MMM-specific singular tests (date spine, cross-layer, zero-fill)
 
 ### Out of Scope
 
+- MTA development work — formally closed, models preserved with limitation headers
 - New mart models or dashboards — focus is on data integrity first
 - Real-time alerting or monitoring infrastructure — freshness checks only
 - CI/CD pipeline setup — defer to future milestone
-- dbt packages (dbt-utils, dbt-expectations) — evaluate later
+- dbt-expectations package — evaluate in v2
 
 ## Context
 
@@ -77,4 +79,4 @@ Accurately attribute user acquisition spend to downstream revenue by connecting 
 | FULL OUTER JOIN pattern for combining spend + attribution + MTA | Need to see all data even when sources don't overlap | ⚠️ Revisit — creates orphan rows, consider LEFT JOIN alternatives |
 
 ---
-*Last updated: 2026-02-10 after milestone v1.0 initialization*
+*Last updated: 2026-02-11 after Phase 3 completion and MMM pivot*

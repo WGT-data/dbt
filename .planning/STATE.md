@@ -2,19 +2,19 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-02-10)
+See: .planning/PROJECT.md (updated 2026-02-11)
 
 **Core value:** Accurately attribute user acquisition spend to downstream revenue by connecting ad touchpoints to in-app behavior across Adjust and Amplitude.
-**Current focus:** Phase 2 complete — ready for Phase 3 (Device ID Normalization Fix)
+**Current focus:** Redefining Phases 4-7 for MMM-first strategy after Phase 3 pivot
 
 ## Current Position
 
-Phase: 3 of 6 (MTA Limitations & MMM Foundation) — COMPLETE
-Plan: 3 of 3 (all plans complete)
-Status: Phase 3 complete - MMM data foundation built
-Last activity: 2026-02-11 — Completed 03-03-PLAN.md (Build MMM marts layer)
+Phase: Redefining roadmap (Phases 4-7)
+Plan: —
+Status: Defining requirements and roadmap for remaining v1.0 work
+Last activity: 2026-02-11 — Redefined v1.0 requirements for MMM pivot
 
-Progress: [██████░░░░] 60% (Phase 1: 100% complete - 2/2 plans, Phase 2: 100% complete - 2/2 plans, Phase 3: 100% complete - 3/3 plans)
+Progress: [██████░░░░] 60% (Phase 1: 100%, Phase 2: 100%, Phase 3: 100%, Phases 4-7: defining)
 
 ## Performance Metrics
 
@@ -71,6 +71,8 @@ Recent decisions affecting current work:
 - 03-03: COALESCE all metrics to 0 for gap-free time series (critical for MMM regression)
 - 03-03: Weekly rollup recomputes KPIs from weekly totals (not averaged from daily KPIs)
 - 03-03: Add data quality flags (HAS_SPEND_DATA, etc.) to distinguish zero-filled from missing data
+- Milestone: Continue v1.0 with redefined Phases 4-7 (DRY refactor, MMM hardening, expanded tests, source freshness)
+- Milestone: TEST-06/07/08 redefined for MMM context (date spine, cross-layer, zero-fill) replacing MTA-specific tests
 
 ### Known Technical Context
 
@@ -82,6 +84,7 @@ Recent decisions affecting current work:
 - **Static mapping table:** `ADJUST_AMPLITUDE_DEVICE_MAPPING` (1.55M rows, stale Nov 2025) maps IDFV-to-IDFV only. iOS only. Redundant.
 - **dbt device mapping model:** `int_adjust_amplitude__device_mapping` never built to production.
 - SANs (Meta, Google, Apple, TikTok) will never have MTA data (no touchpoint sharing).
+- **MMM pipeline built:** 3 intermediate models + 2 mart models, independent of device matching. Uses Adjust API revenue.
 
 ### Pending Todos
 
@@ -91,11 +94,11 @@ None yet.
 
 ### Blockers/Concerns
 
-- **Phase 3 complete - MMM data foundation ready:** MTA limitations documented, MMM pipeline built (staging → intermediate → marts). No device matching dependency. Ready for external MMM tools.
-- **Next phase depends on stakeholder decision:** Phase 4 could continue with MMM modeling in Python (PyMC-Marketing, Robyn, Meridian), or pivot to other priorities. No technical blockers.
+- **No technical blockers:** MMM pipeline built locally, needs dbt Cloud validation.
+- **Network mapping coverage unknown:** Need to verify network_mapping seed covers all active partners in source data.
 
 ## Session Continuity
 
 Last session: 2026-02-11
-Stopped at: Phase 3 complete (all 3 plans finished). MMM data foundation built.
-Resume file: None (phase complete, awaiting Phase 4 direction or stakeholder input)
+Stopped at: Redefining v1.0 roadmap (Phases 4-7) after MMM pivot
+Resume file: None (roadmap creation in progress)
