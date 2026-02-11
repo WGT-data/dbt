@@ -11,7 +11,7 @@ Requirements for milestone v1.0 Data Integrity. Each maps to roadmap phases.
 
 - [ ] **DMAP-01**: Audit reveals actual Amplitude DEVICE_ID format for Android and iOS with documented examples
 - [ ] **DMAP-02**: Audit establishes baseline match rates by platform (Android GPS_ADID, iOS IDFA, iOS IP-based) before any code changes
-- [ ] **DMAP-03**: Android device mapping normalization is fixed so GPS_ADID matches Amplitude device_id (or alternative path documented if impossible)
+- [x] **DMAP-03**: Android device mapping normalization is fixed so GPS_ADID matches Amplitude device_id (or alternative path documented if impossible) — Alternative path documented: MMM pivot, MTA limitations documented
 - [ ] **DMAP-04**: iOS match rate limitations (ATT structural, ~1.4% IDFA) are documented with stakeholder-facing explanation
 - [ ] **DMAP-05**: Full-refresh of staging + downstream models preserves D30 cohort windows using full_history_mode variable
 - [ ] **DMAP-06**: Android match rate improves measurably from current baseline after normalization fix
@@ -38,7 +38,7 @@ Requirements for milestone v1.0 Data Integrity. Each maps to roadmap phases.
 
 - [ ] **CODE-01**: AD_PARTNER CASE statement extracted from v_stg_adjust__installs and v_stg_adjust__touchpoints into reusable macro
 - [ ] **CODE-02**: Consistency test verifies macro produces identical AD_PARTNER values as original CASE statement
-- [ ] **CODE-03**: Device ID normalization (UPPER, strip 'R' suffix) centralized at staging layer
+- [x] **CODE-03**: Device ID normalization (UPPER, strip 'R' suffix) centralized at staging layer — Already centralized in v_stg_amplitude__merge_ids.sql
 - [ ] **CODE-04**: Both staging models produce identical AD_PARTNER for every NETWORK_NAME after refactor
 
 ## v2 Requirements
@@ -76,10 +76,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | DMAP-01 | Phase 2 | Pending |
 | DMAP-02 | Phase 2 | Pending |
-| DMAP-03 | Phase 3 | Pending |
+| DMAP-03 | Phase 3 | Complete |
 | DMAP-04 | Phase 2 | Pending |
-| DMAP-05 | Phase 3 | Pending |
-| DMAP-06 | Phase 3 | Pending |
+| DMAP-05 | Phase 3 | N/A (MMM pivot) |
+| DMAP-06 | Phase 3 | N/A (MMM pivot) |
 | TEST-01 | Phase 1 | Pending |
 | TEST-02 | Phase 1 | Pending |
 | TEST-03 | Phase 1 | Pending |
@@ -94,7 +94,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FRESH-04 | Phase 6 | Pending |
 | CODE-01 | Phase 4 | Pending |
 | CODE-02 | Phase 4 | Pending |
-| CODE-03 | Phase 3 | Pending |
+| CODE-03 | Phase 3 | Complete |
 | CODE-04 | Phase 4 | Pending |
 
 **Coverage:**

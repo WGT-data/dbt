@@ -12,9 +12,9 @@ This roadmap addresses critical data quality issues in the WGT dbt analytics pip
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Test Foundation** - Establish baseline data quality tests before making code changes
-- [ ] **Phase 2: Device ID Audit** - Investigate actual device ID formats and document iOS limitations
-- [ ] **Phase 3: Document MTA Limitations + MMM Data Foundation** - Document MTA structural limitations and build aggregate MMM input models
+- [x] **Phase 1: Test Foundation** - Establish baseline data quality tests before making code changes
+- [x] **Phase 2: Device ID Audit** - Investigate actual device ID formats and document iOS limitations
+- [x] **Phase 3: Document MTA Limitations + MMM Data Foundation** - Document MTA structural limitations and build aggregate MMM input models
 - [ ] **Phase 4: DRY Refactor** - Extract duplicated AD_PARTNER logic into reusable macro
 - [ ] **Phase 5: Expand Test Coverage** - Add comprehensive business rule and cross-layer tests
 - [ ] **Phase 6: Source Freshness & Observability** - Add production monitoring and freshness checks
@@ -65,9 +65,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 03-01-PLAN.md — Document MTA limitations and add limitation headers to existing MTA models
-- [ ] 03-02-PLAN.md — Build MMM intermediate models (daily channel spend, installs, revenue)
-- [ ] 03-03-PLAN.md — Build MMM mart models (daily summary with date spine, weekly rollup) and compile verification
+- [x] 03-01-PLAN.md — Document MTA limitations and add limitation headers to existing MTA models
+- [x] 03-02-PLAN.md — Build MMM intermediate models (daily channel spend, installs, revenue)
+- [x] 03-03-PLAN.md — Build MMM mart models (daily summary with date spine, weekly rollup) and compile verification
 
 ### Phase 4: DRY Refactor (AD_PARTNER Macro)
 **Goal**: Extract duplicated AD_PARTNER CASE statement from installs and touchpoints into single reusable macro to prevent drift
@@ -120,7 +120,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 |-------|----------------|--------|-----------|
 | 1. Test Foundation | 2/2 | Complete | 2026-02-11 |
 | 2. Device ID Audit | 2/2 | Complete | 2026-02-11 |
-| 3. MTA Limitations + MMM Foundation | 0/3 | Not started | - |
+| 3. MTA Limitations + MMM Foundation | 3/3 | Complete | 2026-02-11 |
 | 4. DRY Refactor | 0/TBD | Not started | - |
 | 5. Expand Test Coverage | 0/TBD | Not started | - |
 | 6. Source Freshness & Observability | 0/TBD | Not started | - |
