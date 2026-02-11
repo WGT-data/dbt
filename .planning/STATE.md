@@ -10,28 +10,28 @@ See: .planning/PROJECT.md (updated 2026-02-10)
 ## Current Position
 
 Phase: 1 of 6 (Test Foundation)
-Plan: None yet (ready to plan)
-Status: Ready to plan
-Last activity: 2026-02-10 — Roadmap created for v1.0 Data Integrity milestone
+Plan: 1 of 2 (Staging Layer Tests)
+Status: In progress
+Last activity: 2026-02-10 — Completed 01-01-PLAN.md (Staging Layer Test Foundation)
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█░░░░░░░░░] 10% (Phase 1: 50% complete - 1/2 plans done)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 0
-- Average duration: N/A
-- Total execution time: 0 hours
+- Total plans completed: 1
+- Average duration: 2 min
+- Total execution time: 0.03 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| 01-test-foundation | 1/2 | 2 min | 2 min |
 
 **Recent Trend:**
-- Last 5 plans: None yet
-- Trend: N/A
+- Last 5 plans: 01-01 (2min)
+- Trend: Just started
 
 *Updated after each plan completion*
 
@@ -44,6 +44,9 @@ Recent decisions affecting current work:
 
 - Pre-v1.0: Flip `generate_schema_name` to check `dev` instead of `prod` (fixed stale S3 activity tables)
 - Pre-v1.0: Create network-level MTA mart without CAMPAIGN_NAME dimension (partner-level reporting primary use case)
+- 01-01: Use 60-day lookback for all test filters (balances data quality coverage with test execution performance)
+- 01-01: Test only primary keys and constrained columns (PLATFORM) to avoid test bloat
+- 01-01: Use model-specific timestamp columns in where filters (INSTALL_TIMESTAMP, TOUCHPOINT_TIMESTAMP, FIRST_SEEN_AT, EVENT_TIME)
 
 ### Known Technical Context
 
@@ -66,6 +69,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-10 (roadmap creation)
-Stopped at: Roadmap and STATE files created for v1.0 milestone
+Last session: 2026-02-10T16:57:32Z (plan execution)
+Stopped at: Completed 01-01-PLAN.md (Staging Layer Test Foundation)
 Resume file: None
