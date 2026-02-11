@@ -10,17 +10,17 @@ See: .planning/PROJECT.md (updated 2026-02-10)
 ## Current Position
 
 Phase: 3 of 6 (MTA Limitations & MMM Foundation) — IN PROGRESS
-Plan: 2 of 2 (all plans done for Phase 3)
-Status: Phase 3 complete, ready for Phase 4 planning
-Last activity: 2026-02-11 — Completed 03-02-PLAN.md (Create MMM intermediate models)
+Plan: 1 of 3 (03-01 complete - MTA limitations documented)
+Status: Phase 3 in progress, plans 02 and 03 remain
+Last activity: 2026-02-11 — Completed 03-01-PLAN.md (Document MTA limitations and MMM pivot)
 
-Progress: [██████░░░░] 60% (Phase 1: 100% complete - 2/2 plans, Phase 2: 100% complete - 2/2 plans, Phase 3: 100% complete - 2/2 plans)
+Progress: [████░░░░░░] 40% (Phase 1: 100% complete - 2/2 plans, Phase 2: 100% complete - 2/2 plans, Phase 3: 33% complete - 1/3 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 6
-- Average duration: 4.2 min
+- Total plans completed: 5
+- Average duration: 5.0 min
 - Total execution time: 0.42 hours
 
 **By Phase:**
@@ -29,11 +29,11 @@ Progress: [██████░░░░] 60% (Phase 1: 100% complete - 2/2 pla
 |-------|-------|-------|----------|
 | 01-test-foundation | 2/2 | 5 min | 2.5 min |
 | 02-device-id-audit | 2/2 | 16 min | 8.0 min |
-| 03-mta-limitations-mmm-foundation | 2/2 | 4 min | 2.0 min |
+| 03-mta-limitations-mmm-foundation | 1/3 | 3 min | 3.0 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-02 (3min), 02-01 (4min), 02-02 (12min), 03-01 (2min), 03-02 (2min)
-- Trend: Phase 3 implementation plans very fast (2min avg) - straightforward model creation
+- Last 5 plans: 01-01 (2min), 01-02 (3min), 02-01 (4min), 02-02 (12min), 03-01 (3min)
+- Trend: Phase 3 plan 01 (documentation) completed in 3 minutes
 
 *Updated after each plan completion*
 
@@ -57,10 +57,10 @@ Recent decisions affecting current work:
 - 02-02: iOS IDFV match rate (69.78%) is the correct iOS metric, not IDFA (0%)
 - 02-02: Phase 3 must pivot from "fix normalization" to "investigate alternative matching strategies"
 - 02-02: Recommend investigating USER_ID bridge as potential interim Android solution
-- 03-02: Use Adjust API pre-aggregated revenue (stg_adjust__report_daily) rather than user-level cohort pipeline to avoid dependency on broken device mapping
-- 03-02: Accept event-date-based revenue (not install-cohort-based) as acceptable tradeoff for MMM statistical modeling
-- 03-02: Use Supermetrics as single source of truth for spend to avoid double-counting with Adjust API cost data
-- 03-02: Use device-level S3 install counts (v_stg_adjust__installs) rather than API aggregates for accuracy
+- 03-01: MTA development work formally closed — cannot serve strategic budget allocation
+- 03-01: Existing MTA models preserved (not deleted) for iOS-only tactical analysis with limitation headers
+- 03-01: MMM (Marketing Mix Modeling) is the recommended strategic alternative for budget allocation
+- 03-01: Android MTA fix requires external dependency (Amplitude SDK reconfiguration) — documented without timeline pressure
 
 ### Known Technical Context
 
@@ -81,11 +81,11 @@ None yet.
 
 ### Blockers/Concerns
 
-- **Android MTA blocked on external dependency:** Amplitude SDK must be configured with `useAdvertisingIdForDeviceId()` by mobile engineering team. This is outside dbt scope.
-- **MTA-to-MMM pivot complete:** Phase 3 pivoted from "fix normalization" to "build MMM foundation independent of device mapping". MMM pipeline now uses Adjust API pre-aggregated revenue (no device mapping dependency).
+- **MTA limitations documented and work closed:** Android 0% match (SDK dependency), iOS 7.37% IDFA (ATT), SANs 0% touchpoint data (never shared). MTA cannot serve strategic budget allocation. Preserved for iOS-only tactical analysis.
+- **MMM pivot in progress:** Phase 3 builds MMM data foundation using aggregate data (no device matching dependency). Strategic recommendation documented in mta-limitations.md.
 
 ## Session Continuity
 
 Last session: 2026-02-11
-Stopped at: Phase 3 complete. Ready for Phase 4 planning (MMM daily summary mart).
-Resume file: None (Phase 3 fully complete)
+Stopped at: Phase 3 plan 01 complete (MTA limitations documented). Plans 02 and 03 remain.
+Resume file: .planning/phases/03-device-id-normalization-fix/03-02-PLAN.md (next to execute)
