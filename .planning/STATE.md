@@ -10,28 +10,28 @@ See: .planning/PROJECT.md (updated 2026-02-10)
 ## Current Position
 
 Phase: 1 of 6 (Test Foundation)
-Plan: 1 of 2 (Staging Layer Tests)
-Status: In progress
-Last activity: 2026-02-10 — Completed 01-01-PLAN.md (Staging Layer Test Foundation)
+Plan: 2 of 2 (Intermediate Layer Tests)
+Status: Phase complete
+Last activity: 2026-02-10 — Completed 01-02-PLAN.md (Intermediate Layer Test Foundation)
 
-Progress: [█░░░░░░░░░] 10% (Phase 1: 50% complete - 1/2 plans done)
+Progress: [██░░░░░░░░] 20% (Phase 1: 100% complete - 2/2 plans done)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1
-- Average duration: 2 min
-- Total execution time: 0.03 hours
+- Total plans completed: 2
+- Average duration: 2.5 min
+- Total execution time: 0.08 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01-test-foundation | 1/2 | 2 min | 2 min |
+| 01-test-foundation | 2/2 | 5 min | 2.5 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (2min)
-- Trend: Just started
+- Last 5 plans: 01-01 (2min), 01-02 (3min)
+- Trend: Consistent velocity
 
 *Updated after each plan completion*
 
@@ -47,6 +47,7 @@ Recent decisions affecting current work:
 - 01-01: Use 60-day lookback for all test filters (balances data quality coverage with test execution performance)
 - 01-01: Test only primary keys and constrained columns (PLATFORM) to avoid test bloat
 - 01-01: Use model-specific timestamp columns in where filters (INSTALL_TIMESTAMP, TOUCHPOINT_TIMESTAMP, FIRST_SEEN_AT, EVENT_TIME)
+- 01-02: Use severity: warn for device_mapping relationships test (iOS IDFA match rate ~1.4% due to ATT, Android mapping broken until Phase 3)
 
 ### Known Technical Context
 
@@ -69,6 +70,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-10T16:57:32Z (plan execution)
-Stopped at: Completed 01-01-PLAN.md (Staging Layer Test Foundation)
+Last session: 2026-02-11T01:00:31Z (plan execution)
+Stopped at: Completed 01-02-PLAN.md (Intermediate Layer Test Foundation)
 Resume file: None
