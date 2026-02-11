@@ -1,0 +1,31 @@
+version: 2
+
+models:
+  - name: v_stg_revenue__events
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          config:
+            where: "EVENT_TIME >= DATEADD(day, -60, CURRENT_DATE)"
+          arguments:
+            combination_of_columns:
+              - USER_ID
+              - EVENT_TIME
+              - EVENT_TYPE
+      - not_null:
+          column_name: USER_ID
+          config:
+            where: "EVENT_TIME >= DATEADD(day, -60, CURRENT_DATE)"
+      - not_null:
+          column_name: EVENT_TIME
+          config:
+            where: "EVENT_TIME >= DATEADD(day, -60, CURRENT_DATE)"
+      - not_null:
+          column_name: PLATFORM
+          config:
+            where: "EVENT_TIME >= DATEADD(day, -60, CURRENT_DATE)"
+      - accepted_values:
+          column_name: PLATFORM
+          config:
+            where: "EVENT_TIME >= DATEADD(day, -60, CURRENT_DATE)"
+          arguments:
+            values: ['iOS', 'Android']

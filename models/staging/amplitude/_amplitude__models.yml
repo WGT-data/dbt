@@ -1,0 +1,31 @@
+version: 2
+
+models:
+  - name: v_stg_amplitude__merge_ids
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          config:
+            where: "FIRST_SEEN_AT >= DATEADD(day, -60, CURRENT_DATE)"
+          arguments:
+            combination_of_columns:
+              - DEVICE_ID_UUID
+              - USER_ID_INTEGER
+              - PLATFORM
+      - not_null:
+          column_name: DEVICE_ID_UUID
+          config:
+            where: "FIRST_SEEN_AT >= DATEADD(day, -60, CURRENT_DATE)"
+      - not_null:
+          column_name: USER_ID_INTEGER
+          config:
+            where: "FIRST_SEEN_AT >= DATEADD(day, -60, CURRENT_DATE)"
+      - not_null:
+          column_name: PLATFORM
+          config:
+            where: "FIRST_SEEN_AT >= DATEADD(day, -60, CURRENT_DATE)"
+      - accepted_values:
+          column_name: PLATFORM
+          config:
+            where: "FIRST_SEEN_AT >= DATEADD(day, -60, CURRENT_DATE)"
+          arguments:
+            values: ['iOS', 'Android']
