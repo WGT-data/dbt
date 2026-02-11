@@ -10,7 +10,7 @@
 {{
     config(
         materialized='incremental',
-        unique_key=['PLATFORM', 'TOUCHPOINT_TYPE', 'TOUCHPOINT_EPOCH', 'NETWORK_NAME', 'CAMPAIGN_ID', 'IP_ADDRESS'],
+        unique_key=['PLATFORM', 'TOUCHPOINT_TYPE', 'TOUCHPOINT_EPOCH', 'NETWORK_NAME', 'CAMPAIGN_ID', 'IP_ADDRESS', 'LOAD_TIMESTAMP'],
         incremental_strategy='merge',
         on_schema_change='append_new_columns'
     )
@@ -32,6 +32,7 @@ WITH ios_impressions AS (
          , CREATIVE_NAME
          , TO_TIMESTAMP(CREATED_AT) AS TOUCHPOINT_TIMESTAMP
          , CREATED_AT AS TOUCHPOINT_EPOCH
+         , LOAD_TIMESTAMP
     FROM {{ source('adjust', 'IOS_ACTIVITY_IMPRESSION') }}
     WHERE (IDFA IS NOT NULL OR IP_ADDRESS IS NOT NULL)
       AND CREATED_AT IS NOT NULL
@@ -57,6 +58,7 @@ WITH ios_impressions AS (
          , CREATIVE_NAME
          , TO_TIMESTAMP(CREATED_AT) AS TOUCHPOINT_TIMESTAMP
          , CREATED_AT AS TOUCHPOINT_EPOCH
+         , LOAD_TIMESTAMP
     FROM {{ source('adjust', 'IOS_ACTIVITY_CLICK') }}
     WHERE (IDFA IS NOT NULL OR IP_ADDRESS IS NOT NULL)
       AND CREATED_AT IS NOT NULL
@@ -82,6 +84,7 @@ WITH ios_impressions AS (
          , CREATIVE_NAME
          , TO_TIMESTAMP(CREATED_AT) AS TOUCHPOINT_TIMESTAMP
          , CREATED_AT AS TOUCHPOINT_EPOCH
+         , LOAD_TIMESTAMP
     FROM {{ source('adjust', 'ANDROID_ACTIVITY_IMPRESSION') }}
     WHERE GPS_ADID IS NOT NULL
       AND CREATED_AT IS NOT NULL
@@ -106,6 +109,7 @@ WITH ios_impressions AS (
          , CREATIVE_NAME
          , TO_TIMESTAMP(CREATED_AT) AS TOUCHPOINT_TIMESTAMP
          , CREATED_AT AS TOUCHPOINT_EPOCH
+         , LOAD_TIMESTAMP
     FROM {{ source('adjust', 'ANDROID_ACTIVITY_CLICK') }}
     WHERE GPS_ADID IS NOT NULL
       AND CREATED_AT IS NOT NULL
@@ -159,4 +163,5 @@ SELECT DEVICE_ID
      , CREATIVE_NAME
      , TOUCHPOINT_TIMESTAMP
      , TOUCHPOINT_EPOCH
+     , LOAD_TIMESTAMP
 FROM all_touchpoints

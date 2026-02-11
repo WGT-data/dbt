@@ -26,7 +26,6 @@ models:
     data_tests:
       - dbt_utils.unique_combination_of_columns:
           config:
-            severity: warn
             where: "TOUCHPOINT_TIMESTAMP >= DATEADD(day, -60, CURRENT_DATE)"
           arguments:
             combination_of_columns:
@@ -36,6 +35,7 @@ models:
               - NETWORK_NAME
               - CAMPAIGN_ID
               - IP_ADDRESS
+              - LOAD_TIMESTAMP
       - not_null:
           column_name: PLATFORM
           config:
