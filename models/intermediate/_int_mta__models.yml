@@ -13,8 +13,39 @@ models:
 
       Grain: One row per device + touchpoint + install combination
     columns:
+      - name: JOURNEY_ROW_KEY
+        description: MD5 hash surrogate key (device_id||platform||touchpoint_type||network||timestamps||campaign||adgroup||creative||match_type)
+        data_tests:
+          - unique:
+              config:
+                where: "INSTALL_TIMESTAMP >= DATEADD(day, -60, CURRENT_DATE)"
+          - not_null:
+              config:
+                where: "INSTALL_TIMESTAMP >= DATEADD(day, -60, CURRENT_DATE)"
       - name: DEVICE_ID
         description: Adjust device identifier (IDFV for iOS, GPS_ADID for Android)
+        data_tests:
+          - not_null:
+              config:
+                where: "INSTALL_TIMESTAMP >= DATEADD(day, -60, CURRENT_DATE)"
+          - relationships:
+              config:
+                to: ref('int_adjust_amplitude__device_mapping')
+                field: ADJUST_DEVICE_ID
+                severity: warn
+                where: "INSTALL_TIMESTAMP >= DATEADD(day, -60, CURRENT_DATE)"
+              meta:
+                comment: "iOS IDFA match rate is structurally ~1.4% due to ATT limitation (DMAP-04). Android device mapping not yet fixed (Phase 3). Using severity warn to track metric without failing builds."
+      - name: PLATFORM
+        description: iOS or Android
+        data_tests:
+          - not_null:
+              config:
+                where: "INSTALL_TIMESTAMP >= DATEADD(day, -60, CURRENT_DATE)"
+          - accepted_values:
+              config:
+                values: ['iOS', 'Android']
+                where: "INSTALL_TIMESTAMP >= DATEADD(day, -60, CURRENT_DATE)"
       - name: TOUCHPOINT_TYPE
         description: impression or click
       - name: TOUCHPOINT_POSITION
@@ -45,6 +76,25 @@ models:
 
       Grain: One row per device + touchpoint
     columns:
+      - name: JOURNEY_ROW_KEY
+        description: MD5 hash surrogate key inherited from int_mta__user_journey
+        data_tests:
+          - unique:
+              config:
+                where: "INSTALL_TIMESTAMP >= DATEADD(day, -60, CURRENT_DATE)"
+          - not_null:
+              config:
+                where: "INSTALL_TIMESTAMP >= DATEADD(day, -60, CURRENT_DATE)"
+      - name: PLATFORM
+        description: iOS or Android
+        data_tests:
+          - not_null:
+              config:
+                where: "INSTALL_TIMESTAMP >= DATEADD(day, -60, CURRENT_DATE)"
+          - accepted_values:
+              config:
+                values: ['iOS', 'Android']
+                where: "INSTALL_TIMESTAMP >= DATEADD(day, -60, CURRENT_DATE)"
       - name: CREDIT_TIME_DECAY
         description: |
           Attribution credit using time-decay model (recommended).

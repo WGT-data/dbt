@@ -1,0 +1,46 @@
+version: 2
+
+models:
+  - name: int_adjust_amplitude__device_mapping
+    description: |
+      Maps Adjust device IDs to Amplitude user IDs for cross-platform attribution.
+      Foundation table for joining ad touchpoints (Adjust) to in-app behavior (Amplitude).
+
+      Current State:
+      - iOS: IDFV = Amplitude device_id (confirmed match)
+      - Android: GPS_ADID does NOT match Amplitude device_id (Phase 3 will fix)
+
+      Grain: One row per adjust_device + amplitude_user + platform combination
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - ADJUST_DEVICE_ID
+            - AMPLITUDE_USER_ID
+            - PLATFORM
+          config:
+            where: "FIRST_SEEN_AT >= DATEADD(day, -60, CURRENT_DATE)"
+    columns:
+      - name: ADJUST_DEVICE_ID
+        description: Device identifier from Adjust (IDFV for iOS, GPS_ADID for Android)
+        data_tests:
+          - not_null:
+              config:
+                where: "FIRST_SEEN_AT >= DATEADD(day, -60, CURRENT_DATE)"
+      - name: AMPLITUDE_USER_ID
+        description: User ID from Amplitude (integer)
+        data_tests:
+          - not_null:
+              config:
+                where: "FIRST_SEEN_AT >= DATEADD(day, -60, CURRENT_DATE)"
+      - name: PLATFORM
+        description: iOS or Android
+        data_tests:
+          - not_null:
+              config:
+                where: "FIRST_SEEN_AT >= DATEADD(day, -60, CURRENT_DATE)"
+          - accepted_values:
+              config:
+                values: ['iOS', 'Android']
+                where: "FIRST_SEEN_AT >= DATEADD(day, -60, CURRENT_DATE)"
+      - name: FIRST_SEEN_AT
+        description: First timestamp this device mapping was observed in Amplitude
