@@ -31,10 +31,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Device mapping foreign keys validate that Adjust device_id exists in Amplitude mapping
   4. Platform columns only accept iOS and Android values (no NULL, no typos)
   5. Tests run in CI/CD and use forward-looking filters to avoid historical false positive flood
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] TBD (set during planning)
+- [ ] 01-01-PLAN.md — Install dbt-utils and add staging model tests (PKs, platform, where filters)
+- [ ] 01-02-PLAN.md — Add intermediate model tests (composite keys, FK relationships, platform)
 
 ### Phase 2: Device ID Audit & Documentation
 **Goal**: Investigate actual device ID formats in source systems and document iOS structural limitations before writing normalization logic
@@ -114,7 +115,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Test Foundation | 0/TBD | Not started | - |
+| 1. Test Foundation | 0/2 | Planning complete | - |
 | 2. Device ID Audit | 0/TBD | Not started | - |
 | 3. Device ID Normalization Fix | 0/TBD | Not started | - |
 | 4. DRY Refactor | 0/TBD | Not started | - |
