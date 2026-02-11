@@ -39,8 +39,8 @@ models:
               config:
                 where: "FIRST_SEEN_AT >= DATEADD(day, -60, CURRENT_DATE)"
           - accepted_values:
+              values: ['iOS', 'Android']
               config:
-                values: ['iOS', 'Android']
                 where: "FIRST_SEEN_AT >= DATEADD(day, -60, CURRENT_DATE)"
       - name: FIRST_SEEN_AT
         description: First timestamp this device mapping was observed in Amplitude

@@ -28,8 +28,8 @@ models:
               config:
                 where: "INSTALL_TIME >= DATEADD(day, -60, CURRENT_DATE)"
           - accepted_values:
+              values: ['iOS', 'Android']
               config:
-                values: ['iOS', 'Android']
                 where: "INSTALL_TIME >= DATEADD(day, -60, CURRENT_DATE)"
       - name: ADJUST_DEVICE_ID
         description: Adjust device identifier (IDFV for iOS, GPS_ADID for Android)
@@ -71,8 +71,8 @@ models:
               config:
                 where: "INSTALL_TIME >= DATEADD(day, -60, CURRENT_DATE)"
           - accepted_values:
+              values: ['iOS', 'Android']
               config:
-                values: ['iOS', 'Android']
                 where: "INSTALL_TIME >= DATEADD(day, -60, CURRENT_DATE)"
       - name: INSTALL_DATE
         description: Install date

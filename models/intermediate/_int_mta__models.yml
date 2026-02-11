@@ -29,9 +29,9 @@ models:
               config:
                 where: "INSTALL_TIMESTAMP >= DATEADD(day, -60, CURRENT_DATE)"
           - relationships:
+              to: ref('int_adjust_amplitude__device_mapping')
+              field: ADJUST_DEVICE_ID
               config:
-                to: ref('int_adjust_amplitude__device_mapping')
-                field: ADJUST_DEVICE_ID
                 severity: warn
                 where: "INSTALL_TIMESTAMP >= DATEADD(day, -60, CURRENT_DATE)"
               meta:
@@ -43,8 +43,8 @@ models:
               config:
                 where: "INSTALL_TIMESTAMP >= DATEADD(day, -60, CURRENT_DATE)"
           - accepted_values:
+              values: ['iOS', 'Android']
               config:
-                values: ['iOS', 'Android']
                 where: "INSTALL_TIMESTAMP >= DATEADD(day, -60, CURRENT_DATE)"
       - name: TOUCHPOINT_TYPE
         description: impression or click
@@ -92,8 +92,8 @@ models:
               config:
                 where: "INSTALL_TIMESTAMP >= DATEADD(day, -60, CURRENT_DATE)"
           - accepted_values:
+              values: ['iOS', 'Android']
               config:
-                values: ['iOS', 'Android']
                 where: "INSTALL_TIMESTAMP >= DATEADD(day, -60, CURRENT_DATE)"
       - name: CREDIT_TIME_DECAY
         description: |
