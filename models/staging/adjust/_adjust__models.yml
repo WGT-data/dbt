@@ -1,0 +1,51 @@
+version: 2
+
+models:
+  - name: v_stg_adjust__installs
+    data_tests:
+      - unique:
+          column_name: DEVICE_ID
+          config:
+            where: "INSTALL_TIMESTAMP >= DATEADD(day, -60, CURRENT_DATE)"
+      - not_null:
+          column_name: DEVICE_ID
+          config:
+            where: "INSTALL_TIMESTAMP >= DATEADD(day, -60, CURRENT_DATE)"
+      - not_null:
+          column_name: PLATFORM
+          config:
+            where: "INSTALL_TIMESTAMP >= DATEADD(day, -60, CURRENT_DATE)"
+      - accepted_values:
+          column_name: PLATFORM
+          config:
+            where: "INSTALL_TIMESTAMP >= DATEADD(day, -60, CURRENT_DATE)"
+          arguments:
+            values: ['iOS', 'Android']
+
+  - name: v_stg_adjust__touchpoints
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          config:
+            where: "TOUCHPOINT_TIMESTAMP >= DATEADD(day, -60, CURRENT_DATE)"
+          arguments:
+            combination_of_columns:
+              - PLATFORM
+              - TOUCHPOINT_TYPE
+              - TOUCHPOINT_EPOCH
+              - NETWORK_NAME
+              - CAMPAIGN_ID
+              - IP_ADDRESS
+      - not_null:
+          column_name: PLATFORM
+          config:
+            where: "TOUCHPOINT_TIMESTAMP >= DATEADD(day, -60, CURRENT_DATE)"
+      - accepted_values:
+          column_name: PLATFORM
+          config:
+            where: "TOUCHPOINT_TIMESTAMP >= DATEADD(day, -60, CURRENT_DATE)"
+          arguments:
+            values: ['iOS', 'Android']
+      - not_null:
+          column_name: TOUCHPOINT_EPOCH
+          config:
+            where: "TOUCHPOINT_TIMESTAMP >= DATEADD(day, -60, CURRENT_DATE)"
