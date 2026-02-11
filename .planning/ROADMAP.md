@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [ ] **Phase 1: Test Foundation** - Establish baseline data quality tests before making code changes
 - [ ] **Phase 2: Device ID Audit** - Investigate actual device ID formats and document iOS limitations
-- [ ] **Phase 3: Device ID Normalization Fix** - Fix Android GPS_ADID mapping with full-refresh backfills
+- [ ] **Phase 3: Document MTA Limitations + MMM Data Foundation** - Document MTA structural limitations and build aggregate MMM input models
 - [ ] **Phase 4: DRY Refactor** - Extract duplicated AD_PARTNER logic into reusable macro
 - [ ] **Phase 5: Expand Test Coverage** - Add comprehensive business rule and cross-layer tests
 - [ ] **Phase 6: Source Freshness & Observability** - Add production monitoring and freshness checks
@@ -49,23 +49,25 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 02-01-PLAN.md — Write SQL audit queries for device ID format profiling and baseline match rates
-- [ ] 02-02-PLAN.md — Run audit queries, document findings, write iOS ATT stakeholder doc and normalization strategy
+- [x] 02-01-PLAN.md — Write SQL audit queries for device ID format profiling and baseline match rates
+- [x] 02-02-PLAN.md — Run audit queries, document findings, write iOS ATT stakeholder doc and normalization strategy
 
-### Phase 3: Device ID Normalization Fix
-**Goal**: Fix broken Android GPS_ADID normalization with full-refresh strategy that preserves D30 cohort windows
+### Phase 3: Document MTA Limitations + MMM Data Foundation
+**Goal**: Document why MTA is not viable for strategic budget allocation, formally close MTA development, and build aggregate dbt models for MMM input data
 **Depends on**: Phase 2
-**Requirements**: DMAP-03, DMAP-05, DMAP-06, CODE-03
+**Requirements**: DMAP-03 (alternative path documented), CODE-03 (staging normalization already centralized)
 **Success Criteria** (what must be TRUE):
-  1. Android device mapping normalization applies correct transformations so GPS_ADID matches Amplitude device_id
-  2. Full-refresh of staging and downstream models preserves D30 cohort windows using full_history_mode variable
-  3. Android match rate improves measurably from baseline (targeting 80%+ vs current unknown baseline)
-  4. Device ID normalization is centralized at staging layer (no duplicate logic in intermediate/marts)
-  5. Validation tests confirm row counts and D30 metrics match pre-refresh backup tables
-**Plans**: TBD
+  1. MTA limitations formally documented with stakeholder-facing explanation of why device-level attribution cannot work for Android (0% match) and has limited iOS coverage (~7% IDFA)
+  2. Aggregate MMM input models exist: daily channel spend, daily channel installs, daily channel revenue
+  3. MMM daily summary mart joins spend + installs + revenue at channel+platform+date grain
+  4. Existing MTA models preserved as-is (not deleted) with documentation of limitations
+  5. Date spine ensures complete time series for MMM (no gaps)
+**Plans**: 3 plans
 
 Plans:
-- [ ] TBD (set during planning)
+- [ ] 03-01-PLAN.md — Document MTA limitations and add limitation headers to existing MTA models
+- [ ] 03-02-PLAN.md — Build MMM intermediate models (daily channel spend, installs, revenue)
+- [ ] 03-03-PLAN.md — Build MMM mart models (daily summary with date spine, weekly rollup) and compile verification
 
 ### Phase 4: DRY Refactor (AD_PARTNER Macro)
 **Goal**: Extract duplicated AD_PARTNER CASE statement from installs and touchpoints into single reusable macro to prevent drift
@@ -116,9 +118,9 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Test Foundation | 0/2 | Planning complete | - |
-| 2. Device ID Audit | 0/2 | Planning complete | - |
-| 3. Device ID Normalization Fix | 0/TBD | Not started | - |
+| 1. Test Foundation | 2/2 | Complete | 2026-02-11 |
+| 2. Device ID Audit | 2/2 | Complete | 2026-02-11 |
+| 3. MTA Limitations + MMM Foundation | 0/3 | Not started | - |
 | 4. DRY Refactor | 0/TBD | Not started | - |
 | 5. Expand Test Coverage | 0/TBD | Not started | - |
 | 6. Source Freshness & Observability | 0/TBD | Not started | - |
