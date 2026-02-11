@@ -1,293 +1,261 @@
 # Project Research Summary
 
-**Project:** WGT Golf dbt Analytics - Device Mapping Fixes & Comprehensive Testing
-**Domain:** dbt Analytics Pipeline (Snowflake + Mobile Attribution)
-**Researched:** 2026-02-10
+**Project:** WGT dbt Analytics v1.0 - Pipeline Hardening
+**Domain:** dbt project pipeline hardening (DRY refactor, testing, source freshness)
+**Researched:** 2026-02-11
 **Confidence:** HIGH
 
 ## Executive Summary
 
-This project addresses critical data quality issues in a mature dbt analytics pipeline for mobile game attribution. The core problems are (1) broken Android device ID mapping between Adjust attribution data and Amplitude analytics (preventing revenue attribution), (2) structurally low iOS match rates that are often misunderstood as bugs, and (3) zero test coverage creating hidden data quality issues. Research confirms these are common problems in mobile attribution warehouses, with well-documented solutions.
+The remaining v1.0 work focuses on productionizing the existing MMM pipeline through three complementary activities: extracting duplicated AD_PARTNER logic into a macro (DRY refactor), adding singular tests for business rule validation, and configuring source freshness monitoring. The research reveals a critical finding: **all required capabilities exist natively in dbt or the already-installed dbt-utils package** — no new dependencies needed.
 
-The recommended approach is incremental adoption: establish baseline data quality tests first, then carefully refactor device ID normalization with full-refresh backfills, and finally extract duplicated logic into DRY macros. The critical insight is that this project is NOT starting from scratch—it's retrofitting tests onto a production pipeline with historical data quality issues. Testing adoption must be forward-looking (validate new data first) to avoid decision paralysis from hundreds of test failures on historical data.
+This is a low-risk, high-value hardening effort. The stack discipline of using native dbt features (macros, singular tests, source freshness YAML) over adding packages reduces maintenance burden while improving code quality. The architecture integrates cleanly: macros live in `macros/`, tests in `tests/`, and freshness configs in existing `_sources.yml` files. All validation happens in dbt Cloud (no local environment required).
 
-Key risks include: (1) changing device ID normalization in staging models breaks incremental downstream models through duplication, requiring expensive full-refreshes that invalidate 30-day cohort windows, (2) refactoring the duplicated AD_PARTNER mapping logic without consistency tests causes silent attribution mismatches, and (3) iOS match rate expectations must be managed—the 1.4% IDFA match rate is structural due to Apple's ATT consent requirements, not a data quality bug fixable through normalization. Use incremental model testing strategies, full_history_mode variables for safe backfills, and probabilistic IP-based matching for iOS rather than pursuing deterministic device ID joins.
+The key risk is **silent data drift during macro extraction** — the AD_PARTNER CASE statement must produce identical output after refactoring. Prevention: create a consistency test that compares macro output to original CASE logic before deployment, validate in dbt Cloud dev environment with both full-refresh and incremental runs, then deploy. Additional risks include timezone mismatches in freshness configs and vacuous singular tests that pass because test logic is broken, not because data is clean. Both are mitigated through explicit validation steps.
 
 ## Key Findings
 
 ### Recommended Stack
 
-The project should adopt the industry-standard dbt testing stack incrementally: dbt-utils 1.3.3 for basic generic tests (unique, not_null, relationships), dbt-expectations 0.10.9 (Metaplane fork) for advanced validation (regex, distributions, statistical tests), and elementary 0.22.1 for observability and anomaly detection. For device ID resolution, leverage Snowflake's native EDITDISTANCE and JAROWINKLER_SIMILARITY functions for fuzzy matching (threshold >= 85) rather than external Python UDFs. All packages are dbt Fusion compatible (support dbt 1.0-3.0 range), though dbt-expectations requires dbt >= 1.7.
+**Zero new packages required.** All Phase 4-6 work uses native dbt features and existing dbt-utils (>=1.1.1).
 
-**Core technologies:**
-- **dbt-utils 1.3.3**: Foundation for generic tests (unique, not_null, relationships, accepted_values) and utility macros. Required dependency for other packages. Use at all model layers.
-- **dbt-expectations 0.10.9**: Advanced data quality tests (regex validation, statistical analysis, multi-column logic, distribution testing). Use at intermediate/marts layers only (slower execution). Active Metaplane fork replaces deprecated original.
-- **elementary 0.22.1**: Data observability with anomaly detection tests (freshness, volume, distribution, cardinality shifts). Use at marts layer for production monitoring. OSS version sufficient; includes Slack/Teams alerts.
-- **Snowflake JAROWINKLER_SIMILARITY**: Built-in fuzzy string matching optimized for short device IDs. Returns 0-100 similarity score. Use threshold >= 85 for high-confidence matches when exact device ID joins fail.
-- **Custom dbt macro for ID normalization**: Centralized UPPER(), TRIM(), and hyphen removal for GPS_ADID and IDFV. Critical for improving Android match rates from existing GPS_ADID data.
+**Core capabilities:**
+- **Native dbt macros** — Extract duplicated 18-line AD_PARTNER CASE statement into parameterized macro. No package needed.
+- **Native singular tests** — SQL files in `tests/` directory for complex business rules (date spine completeness, cross-layer consistency, zero-fill integrity). Standard dbt feature.
+- **Native source freshness** — YAML configs in `_sources.yml` files with `loaded_at_field`, `warn_after`, `error_after`. Built into dbt-core since v0.18.0.
+- **dbt Cloud job scheduler** — Separate freshness job (hourly) vs model builds (every 6 hours). Native dbt Cloud feature.
 
-**Critical version requirements:**
-- dbt-expectations requires dbt >= 1.7.x (upgrade dbt if on older version)
-- dbt-utils 1.3.3 requires dbt >= 1.3.0 (likely already met in WGT project)
+**Explicitly rejected:**
+- dbt-expectations: Overkill for simple MMM business rule tests. Singular SQL is clearer.
+- re_data / elementary: Too early for observability framework. Native freshness sufficient.
+- Additional macro libraries: 18-line CASE statement is simple enough to write inline.
+
+**Optional upgrade:** dbt-utils 1.1.1 → 1.3.3 (latest stable). Backward compatible patch, fixes time filter bug in date_spine. Not required but recommended.
 
 ### Expected Features
 
-Mobile attribution analytics pipelines have clear "table stakes" expectations—features users assume exist in production. The WGT project currently lacks most basic data quality features, making this a "catch-up" effort rather than greenfield development.
-
 **Must have (table stakes):**
-- **Generic schema tests** — unique + not_null on all primary keys, device IDs, and join columns. Currently missing entirely; this is unusual for production pipelines.
-- **Source freshness monitoring** — Detect stale upstream data (Adjust, Amplitude) before it corrupts metrics. Use dbt's built-in source freshness with 1-hour warn thresholds.
-- **Referential integrity tests** — Validate device mapping relationships (Adjust → Amplitude foreign keys). Use built-in `relationships` test.
-- **Incremental model testing** — Ensure incremental models produce same results as full-refresh. Critical for device mapping which uses 7-day lookback windows.
-- **Not-null constraints on join keys** — Prevent silent data loss. Apply to DEVICE_ID, USER_ID, PLATFORM in all models.
+- Source freshness with `loaded_at_field` — Standard dbt observability for detecting stale upstream data
+- Singular tests for business logic — Generic tests (unique, not_null) only cover data shape; business rules need custom SQL
+- Macros for repeated CASE logic — DRY principle prevents drift between `v_stg_adjust__installs` and `v_stg_adjust__touchpoints`
+- Incremental model validation — Must verify models work on first run AND subsequent runs (is_incremental branches)
+- Cross-layer consistency tests — Aggregated marts must reconcile to source layer
+- Zero-fill vs missing data flags — HAS_SPEND_DATA, HAS_INSTALL_DATA flags already exist in mart, tests validate integrity
 
-**Should have (competitive advantage):**
-- **Device mapping diagnostics & alerts** — Surface anomalies (>100 devices/user, match rate < threshold) proactively. Model already exists (`int_device_mapping__diagnostics`), needs severity tests added.
-- **Platform-specific validation** — Test Android GPS_ADID mapping separately from iOS IDFV (different ID types, failure modes). Android is broken (needs fix), iOS is structural (manage expectations).
-- **DRY macros for reused logic** — Extract duplicated AD_PARTNER CASE statement (appears in 2 models, 18 lines each) into single macro to prevent drift.
-- **Stale static table detection** — Alert when `ADJUST_AMPLITUDE_DEVICE_MAPPING` hasn't been refreshed (currently stale since Nov 2025). Low complexity, high value.
-- **Cross-model consistency tests** — Validate device counts match across staging → intermediate → marts. Detects silent data loss from join issues.
+**Should have (differentiators):**
+- Hierarchical freshness config — Define at source level (all tables inherit), override at table level for exceptions
+- Macro with consistency test — Extract logic into macro AND validate it produces identical output to original CASE
+- Date spine completeness test — MMM regression requires gap-free daily data
+- Scheduled freshness as separate job — Run freshness every 2 hours, model builds every 12 hours (different cadences)
 
-**Defer (v2+):**
-- **dbt-expectations advanced tests** — Useful but not blocking. Add after core testing framework stabilizes.
-- **Data quality dashboards** — BI tool integration for test result trends. dbt Cloud test UI sufficient for now.
-- **Automated backfill detection** — Gap detection beyond basic freshness tests. Add when observability mature.
-- **Unit tests (dbt v1.8+)** — Test macros in isolation. Defer until macro library is stable.
-
-**Anti-features to avoid:**
-- **Fuzzy device ID matching in attribution** — Introduces non-deterministic mappings, breaks auditability. Use deterministic matching (IDFV = device_id) or probabilistic IP-based matching, not ML guessing.
-- **Testing every column for uniqueness** — Creates test bloat, wastes CI/CD time. Only test natural/surrogate keys.
-- **Real-time freshness monitoring** — Adds complexity for marginal benefit. Hourly/daily SLA checks sufficient for analytics.
+**Defer (anti-features — explicitly avoid):**
+- Freshness on every source table — Creates alert fatigue; focus on critical upstream tables only
+- Over-abstracted macros — Only extract when logic duplicated 2+ times; favor readability
+- Generic tests for complex business rules — Use singular SQL files for MMM-specific validations
+- Testing every column — Only test primary keys and critical business logic
+- Real-time freshness alerting — Analytics SLAs are hourly/daily, not seconds
+- --full-refresh in production — Only use in dev or intentional backfill scenarios
 
 ### Architecture Approach
 
-The WGT project follows standard dbt three-layer architecture (staging → intermediate → marts), which aligns with industry best practices. Device mapping fixes require changes at all three layers, with testing co-located alongside models in YAML files. The project has established patterns (incremental models with unique_key, generate_schema_name macro for environment routing, network_mapping seed for reference data) that should be preserved.
+All three features integrate cleanly with existing dbt project structure through standard dbt conventions. **No structural changes required** — only new files added to existing directories: `macros/map_ad_partner.sql` (new), tests in `tests/mmm/` subdirectories (new), freshness configs in existing `_sources.yml` files (modified).
 
 **Major components:**
 
-1. **Staging Layer (Source Normalization)** — `v_stg_adjust__installs`, `v_stg_adjust__touchpoints`, `v_stg_amplitude__merge_ids` handle device ID normalization (UPPER, strip Android 'R' suffix). Materialized as views. Tests: not_null on device IDs, accepted_values for platform, regex validation for ID formats. Key fix needed: Android GPS_ADID normalization currently incorrect.
+1. **Source Freshness Monitoring** — Add `freshness` configs to existing `models/staging/*/_*__sources.yml` files. Use CREATED_AT (epoch timestamp) for Adjust, EVENT_TIME/SERVER_UPLOAD_TIME for Amplitude. Configure source-level defaults, override at table level for exceptions. Deploy via separate dbt Cloud job scheduled hourly.
 
-2. **Intermediate Layer (Device Mapping & Attribution Logic)** — `int_adjust_amplitude__device_mapping` (incremental, 7-day lookback), `int_mta__user_journey` (incremental), `int_mta__touchpoint_credit` handle device ID joins and multi-touch attribution credit allocation. Materialized as incremental tables. Tests: unique on composite keys, relationships (foreign key validation), business rule tests (credit sums to 1.0). Critical path for device mapping fix.
+2. **Singular Tests** — Create `tests/mmm/`, `tests/mta/`, `tests/cross_layer/` subdirectories. Tests are SQL queries returning failing rows (0 rows = pass). Examples: date spine completeness, weekly rollup matches daily, AD_PARTNER consistency after macro extraction. Tests run automatically via `dbt build` in CI jobs.
 
-3. **Marts Layer (Business Aggregations)** — `mart_campaign_performance_full_mta`, `mart_network_performance_mta` produce reporting-ready attribution metrics with D7/D30 cohort windows. Materialized as incremental tables. Tests: anomaly detection (elementary), business logic validation (ROAS ranges), row-level recency tests. Uses device mapping from intermediate layer.
+3. **AD_PARTNER Macro** — Extract duplicated CASE statement (lines 65-83 in `v_stg_adjust__installs.sql`, lines 140-158 in `v_stg_adjust__touchpoints.sql`) into `macros/map_ad_partner.sql`. Replace original CASE with `{{ map_ad_partner('NETWORK_NAME') }}` calls. Macro is compile-time only (generates SQL, no runtime components).
 
-4. **Diagnostic Models** — `int_device_mapping__diagnostics` (users with 100+ devices), `int_device_mapping__distribution_summary` (match rate executive summary). Materialized as full-refresh tables. Not part of DAG, used for monitoring and stakeholder communication.
-
-5. **DRY Macros (NEW)** — `map_ad_partner()` macro will centralize duplicated AD_PARTNER CASE statement. Currently duplicated across 2 models (36 total lines). Refactor requires consistency test to prevent attribution drift.
-
-6. **Testing Structure (NEW)** — Generic tests in co-located YAML files (`_adjust__models.yml`, `_amplitude__sources.yml`), singular tests in `/tests` directory organized by layer (staging/, intermediate/, marts/), unit tests in model YAML (dbt v1.8+). Use test pyramid: many generic tests (fast), moderate singular tests (business rules), few integration tests (end-to-end).
+**Integration points:**
+- Macro refactor is transparent to downstream models (AD_PARTNER column still exists with identical values)
+- Tests are read-only (query models but don't create tables)
+- Freshness checks are read-only (query source timestamps but don't run models)
+- All validation happens in dbt Cloud jobs (no local dbt required)
 
 ### Critical Pitfalls
 
-Research identified 6 critical pitfalls specific to retrofitting tests onto existing pipelines with device ID refactoring. These are not theoretical—they're derived from documented incidents in mobile attribution projects.
+1. **Macro Extraction Changes Output Silently (CODE-01/02)** — Extracting duplicated CASE into macro can introduce subtle differences (whitespace, NULL handling, ELSE clause) that break downstream models. **Prevention:** Create baseline of current output BEFORE extraction, create consistency test comparing macro to original CASE, run test in dbt Cloud dev, expect 0 failures. Update one model at a time, validate, then second model.
 
-1. **Changing device ID logic in staging breaks incremental downstream models** — Modifying GPS_ADID normalization (adding UPPER, stripping 'R' suffix) causes incremental models to INSERT new rows instead of UPDATE existing rows, creating duplicates. The unique_key in incremental models won't match old vs new device IDs. **Prevention:** Full-refresh staging + ALL downstream with `dbt run --full-refresh --select model_name+`. Add uniqueness tests BEFORE changing logic to detect duplicates immediately. Use shadow column approach (add normalized_device_id as NEW column, backfill, then deprecate old column).
+2. **Wrong `loaded_at_field` — Created vs Loaded Timestamps (FRESH-01/02)** — Using source system creation timestamps (CREATED_AT, EVENT_TIME) instead of ETL load timestamps (LOAD_TIMESTAMP, _LOADED_AT) makes freshness report age of data events, not data delivery, causing silent staleness. **Prevention:** For Adjust S3 tables, use LOAD_TIMESTAMP (ETL write time), not CREATED_AT (event time). Document in YAML: `loaded_at_field: LOAD_TIMESTAMP  # ETL time, not event time`.
 
-2. **Full-refresh invalidates D30 cohort windows** — Running `--full-refresh` on marts resets historical window. Models like `mart_campaign_performance_full` have 35-day lookback in incremental mode, insufficient to recalculate D30 metrics for cohorts older than 35 days. **Prevention:** Implement `full_history_mode` variable to include all data during full-refresh: `{% if is_incremental() and not var('full_history_mode', false) %}` with date filter, else no filter. Export backup before full-refresh. Validate D30 metrics exist for cohorts 30+ days old after refresh.
+3. **Incremental Model First Run vs Subsequent Run Divergence (MMM-01/02)** — `is_incremental()` branches cause models to produce different results on first run (full) vs subsequent runs (incremental), breaking backfills. **Prevention:** Keep business logic OUTSIDE is_incremental block. Use performance filters only (7-day lookback for late data). Test BOTH paths in dbt Cloud: `--full-refresh` then normal run, verify row counts increase or stay same (not decrease).
 
-3. **Refactoring AD_PARTNER CASE logic changes attribution without detection** — The 18-line CASE statement is duplicated in installs and touchpoints models. Refactoring to macro or seed introduces risk of logic drift (different conditions, typos, missing network names → NULL instead of 'Other'). Attribution joins break when install AD_PARTNER != touchpoint AD_PARTNER for same network. **Prevention:** Add consistency test BEFORE refactoring that verifies both models produce identical AD_PARTNER for every NETWORK_NAME. Use shadow column during migration (AD_PARTNER_NEW alongside AD_PARTNER). Only swap after consistency test passes.
+4. **Singular Tests That Pass Vacuously (TEST-06/07/08)** — Tests return 0 rows because test logic is broken (impossible WHERE, empty JOIN), not because data is good. **Prevention:** Validate test fails when intentional violation added. Add row count expectations. Include context columns in output (not just IDs). Test the test before deploying.
 
-4. **Adding tests to zero-test project floods with false positives** — First `dbt test` run on WGT project will reveal hundreds of historical data quality issues (NULL device IDs, duplicates, casing inconsistencies), causing decision paralysis. Teams either ignore all failures (defeats purpose) or fix all issues first (blocks progress for weeks). **Prevention:** Forward-looking tests only: `where: "created_at >= '2026-02-01'"` to validate new data. Triage failures by severity (CRITICAL: NULL device IDs in joins, MODERATE: duplicates, COSMETIC: casing). Fix critical immediately, document moderate as known issues, ignore cosmetic. Add tests incrementally (5-10 per sprint, not 50+ at once).
-
-5. **Source freshness checks fail without loaded_at_field** — Shared Snowflake databases (Adjust S3, Amplitude data share) lack ETL metadata columns like `_loaded_at`. Freshness checks fail with "column not found" or use wrong column (event_time instead of load_time), reporting stale data as fresh. **Prevention:** Audit source schemas first (`SHOW COLUMNS`). Use Snowflake INFORMATION_SCHEMA metadata (LAST_ALTERED) as fallback for tables without loaded_at_field. For event tables, use event_time as proxy with longer thresholds (warn_after 6 hours instead of 1 hour) to account for lag. Document proxy approach and supplement with external monitoring (Fivetran/Airbyte logs).
-
-6. **iOS low match rate attributed to data issue when it's structural** — 1.4% iOS IDFA match rate leads teams to assume normalization bug, spending weeks investigating. Actual cause: touchpoints use IDFA (requires ATT consent, ~25% opt-in rate), installs use IDFV (different identifier, cannot be joined deterministically). 1.4% represents users who consented AND clicked AND installed—this is expected given consent rates. **Prevention:** Document iOS ATT limitations in project README before starting work. Baseline match rates before changes (iOS IDFA ~1-5%, iOS IP-based ~40-60%, Android GPS_ADID ~90%). Don't expect iOS IDFA match rate to improve significantly. Invest in IP-based probabilistic matching quality (timestamp windows, user-agent filters) instead of pursuing deterministic IDFA joins.
+5. **Source Freshness on Static Tables Without Timestamps (FRESH-03)** — `ADJUST_AMPLITUDE_DEVICE_MAPPING` lacks timestamp column. Adding freshness fails with "column does not exist". **Prevention:** Omit freshness config for static tables. Use singular test checking Snowflake INFORMATION_SCHEMA.TABLES.LAST_ALTERED instead, or row count change test.
 
 ## Implications for Roadmap
 
-Based on research, the project requires 6 phases with specific ordering to manage incremental model dependencies and avoid pitfall triggers. Phase ordering is constrained by: (1) tests must exist before refactoring logic (catch regressions immediately), (2) device ID normalization must be fixed with full-refresh strategy (requires backup/restore planning), (3) DRY refactoring must happen after tests stabilize (consistency tests prevent drift).
+Based on research, the existing Phase 4-6 structure is optimal. Recommendations:
 
-### Phase 1: Test Foundation (Table Stakes)
-**Rationale:** Establish baseline data quality tests before making any code changes. Forward-looking tests (new data only) avoid historical data paralysis. This phase is defensive—catch regressions from upcoming device ID changes.
-
-**Delivers:**
-- Generic tests (unique, not_null, accepted_values) on staging models (installs, touchpoints, merge_ids)
-- Referential integrity tests on device mapping intermediate models
-- Platform-specific validation (Android vs iOS separate tests)
-- Test execution in CI/CD pipeline
-
-**Addresses Features:**
-- Generic schema tests (table stakes)
-- Not-null constraints on join keys (table stakes)
-- Platform-specific validation (differentiator)
-
-**Avoids Pitfalls:**
-- Pitfall 4: Use `where: "created_at >= '2026-02-01'"` to test only new data, avoiding historical test failure flood
-- Pitfall 1: Uniqueness tests on unique_key columns will immediately detect duplicates if device ID changes break incremental logic
-
-**Research Flag:** Standard dbt testing patterns. Skip `/gsd:research-phase`.
-
-### Phase 2: Device ID Audit & Documentation
-**Rationale:** Investigate actual device ID formats in source systems before writing normalization logic. Prevent the "fix based on assumptions" anti-pattern. Document iOS ATT limitations to set stakeholder expectations.
+### Phase 4: DRY Refactor (CODE-01/02/04)
+**Rationale:** Macro extraction must complete before comprehensive testing. Tests should validate macro logic, not duplicated CASE statements. Clean codebase foundation before adding validation layer.
 
 **Delivers:**
-- Audit queries for Amplitude DEVICE_ID format (Android vs iOS)
-- Audit queries for Adjust GPS_ADID format (verify UPPER, hyphen handling)
-- Documentation of iOS match rate limitations (ATT consent rates, IDFA vs IDFV)
-- Baseline match rate metrics (Android, iOS IDFA, iOS IP-based) before changes
-- Device ID normalization strategy document with examples
+- `macros/map_ad_partner.sql` — Single source of truth for NETWORK_NAME → AD_PARTNER mapping
+- Refactored `v_stg_adjust__installs.sql` and `v_stg_adjust__touchpoints.sql` — 18 lines removed per model
+- `tests/staging/assert_ad_partner_macro_consistency.sql` — Validates macro produces identical output
 
-**Addresses Features:**
-- Device mapping diagnostics (already exists, baseline current state)
+**Build order:**
+1. Create macro file (EXACT copy of CASE logic, no improvements yet)
+2. Create consistency test comparing macro to original CASE
+3. Refactor `v_stg_adjust__installs.sql` (replace CASE with macro call)
+4. Run consistency test, expect 0 failures
+5. Refactor `v_stg_adjust__touchpoints.sql`
+6. Validate downstream models compile without errors
 
-**Avoids Pitfalls:**
-- Pitfall 6: Document iOS structural limitations before starting work, preventing weeks of "why is iOS match rate low?" investigation
-- Pitfall 1: Understand current device ID formats before changing normalization logic, preventing incorrect assumptions
+**Avoids:** Silent data drift (Pitfall 4), seed case sensitivity bugs (Pitfall 10)
 
-**Research Flag:** May need deeper investigation depending on Amplitude schema complexity. Consider `/gsd:research-phase` if source format is non-standard.
+**Complexity:** Low (1-2 hours). All testing in dbt Cloud dev environment.
 
-### Phase 3: Device ID Normalization Fix (with Full-Refresh Backfill)
-**Rationale:** Fix broken Android GPS_ADID normalization now that tests exist to catch regressions. Use full-refresh strategy with full_history_mode to preserve D30 cohort windows. This is the highest-risk phase—requires careful backup/restore planning.
+**Research confidence:** HIGH. Macro organization well-documented. No deep research needed.
 
-**Delivers:**
-- Updated `v_stg_amplitude__merge_ids` with correct Android device ID normalization
-- Updated `v_stg_adjust__installs` to verify GPS_ADID normalization (likely already correct based on UPPER usage)
-- Full-refresh of staging + downstream incremental models using `dbt run --full-refresh --select v_stg_amplitude__merge_ids+`
-- Validation tests comparing row counts before/after, D30 metrics completeness
-- Improved Android match rate (target: 80%+, up from current unknown baseline)
-
-**Addresses Features:**
-- Incremental model testing (table stakes)—verify full-refresh produces same results as incremental
-
-**Avoids Pitfalls:**
-- Pitfall 1: Full-refresh staging + downstream together (`model_name+` selector) prevents incremental model duplication
-- Pitfall 2: Implement full_history_mode variable in marts to include all data (not just 35-day lookback), preserving D30 cohort windows
-- Backup tables before full-refresh, validate cohort completeness after
-
-**Research Flag:** May need `/gsd:research-phase` if Amplitude device ID format is unexpected or requires complex fuzzy matching logic.
-
-### Phase 4: DRY Refactor (AD_PARTNER Macro)
-**Rationale:** Extract duplicated AD_PARTNER CASE statement after device mapping stabilizes and tests are reliable. Use shadow column approach to verify macro produces identical output before swapping.
+### Phase 5: Expand Test Coverage (TEST-06/07/08, MMM-01/02/03/04)
+**Rationale:** Singular tests validate refactored models and business logic before adding observability. Tests protect production pipeline before freshness alerts. Must validate incremental models work correctly (first run vs subsequent runs).
 
 **Delivers:**
-- `macros/map_ad_partner.sql` macro with centralized CASE statement
-- Modified `v_stg_adjust__installs` and `v_stg_adjust__touchpoints` to use macro
-- Consistency test verifying both models produce identical AD_PARTNER for all NETWORK_NAME values
-- Migration validation: attribution install counts match touchpoint counts before/after refactor
+- `tests/mmm/assert_mmm_daily_grain_completeness.sql` — Date spine has no gaps
+- `tests/mmm/assert_mmm_weekly_rollup_matches_daily.sql` — Weekly sums match daily detail
+- `tests/mmm/assert_mmm_zero_fill_integrity.sql` — HAS_*_DATA flags correct
+- `tests/cross_layer/assert_device_counts_staging_to_marts.sql` — Cross-layer consistency
+- MMM incremental model validation — Both code paths tested
 
-**Addresses Features:**
-- DRY macros (differentiator)—eliminates 36 lines of duplicated code, prevents drift
+**Build order:**
+1. Create test directory structure (`tests/mmm/`, `tests/mta/`, `tests/cross_layer/`)
+2. Write MMM singular tests (date spine, weekly rollup, zero-fill)
+3. Test incremental models TWICE (--full-refresh, then normal run)
+4. Write cross-layer consistency tests (with consistent filters: iOS-only, date >= 2024-06-01)
+5. Run `dbt test --select test_type:singular` in dbt Cloud, debug failures
+6. Add to CI (automatic via `dbt build`)
 
-**Avoids Pitfalls:**
-- Pitfall 3: Consistency test catches AD_PARTNER logic drift before it causes silent attribution mismatches
-- Shadow column approach (AD_PARTNER_NEW) allows parallel validation before swapping
+**Avoids:** Vacuous tests (Pitfall 6), brittle hardcoded thresholds (Pitfall 7), cross-layer filter mismatches (Pitfall 8), incremental divergence (Pitfall 5)
 
-**Research Flag:** Standard dbt macro pattern. Skip `/gsd:research-phase`.
+**Complexity:** Medium (2-3 hours). Singular tests are straightforward SQL, but require business rule knowledge.
 
-### Phase 5: Expand Test Coverage (Singular + Business Rules)
-**Rationale:** Add comprehensive test suite after critical tests stabilize. Include singular tests for complex business rules (credit sums to 1.0, lookback window coverage, cross-layer consistency).
+**Research confidence:** HIGH. Test organization patterns clear. Business logic tests domain-specific (not architectural concern).
 
-**Delivers:**
-- Singular tests in `tests/` directory (touchpoint credit sums, user journey gaps, device mapping orphans)
-- Expanded generic tests (not just keys, but important columns: timestamps, amounts, IDs)
-- Elementary anomaly detection tests on marts (volume, distribution, freshness anomalies)
-- Incremental model idempotency tests (full-refresh vs incremental comparison)
-
-**Addresses Features:**
-- Cross-model consistency tests (differentiator)
-- Incremental model testing (table stakes)—verify idempotency
-- Device mapping diagnostics tests (differentiator)—add severity thresholds
-
-**Avoids Pitfalls:**
-- Pitfall 4: Tests added incrementally (5-10 per sprint), not 50+ at once, preventing test suite management overhead
-- Tests now cover business rules, not just data shape (uniqueness, not_null already in Phase 1)
-
-**Research Flag:** Standard dbt testing patterns. Skip `/gsd:research-phase`.
-
-### Phase 6: Source Freshness & Observability
-**Rationale:** Add production monitoring after data pipeline is stable and tests are comprehensive. Source freshness is last because it requires understanding source schema timestamp columns (discovered in Phase 2 audit).
+### Phase 6: Source Freshness & Observability (FRESH-01/02/03/04)
+**Rationale:** Observability layer assumes stable, tested pipeline. Freshness alerts only valuable if data pipeline is validated. Add monitoring after code quality improvements and testing complete.
 
 **Delivers:**
-- Source freshness configuration in `_adjust__sources.yml` and `_amplitude__sources.yml` with correct loaded_at_field or Snowflake metadata fallback
-- Scheduled `dbt source freshness` job (every 30 min, 2x the 1-hour SLA)
-- Elementary CLI setup for observability dashboard and Slack alerts
-- Stale static table detection (ADJUST_AMPLITUDE_DEVICE_MAPPING freshness test)
-- Production monitoring job running elementary tests every 6 hours
+- Freshness configs in `models/staging/adjust/_adjust__sources.yml` (LOAD_TIMESTAMP, warn 6h, error 12h)
+- Freshness configs in `models/staging/amplitude/_amplitude__sources.yml` (SERVER_UPLOAD_TIME, warn 6h, error 12h)
+- Freshness configs in `models/staging/supermetrics/_supermetrics__sources.yml` (DATE proxy, warn 12h, error 24h)
+- Static table staleness test `tests/static_table_changed_unexpectedly.sql` (for ADJUST_AMPLITUDE_DEVICE_MAPPING)
+- dbt Cloud freshness job (scheduled every 1 hour)
 
-**Addresses Features:**
-- Source freshness monitoring (table stakes)
-- Stale static table detection (differentiator)
+**Build order:**
+1. Audit timestamp columns (query INFORMATION_SCHEMA.COLUMNS to confirm LOAD_TIMESTAMP exists)
+2. Add freshness to Adjust sources (use LOAD_TIMESTAMP, not CREATED_AT)
+3. Add freshness to Amplitude sources (identify correct timestamp column)
+4. Add freshness to Supermetrics sources (use DATE proxy or _FIVETRAN_SYNCED)
+5. Omit freshness for static tables, create row count change test instead
+6. Create dbt Cloud freshness job (schedule hourly, command: `dbt source freshness`)
+7. Test freshness job manually, verify results in logs
+8. Trigger failure (temporarily lower threshold) to test alerting
 
-**Avoids Pitfalls:**
-- Pitfall 5: Use proxy timestamps (event_time) or Snowflake metadata (LAST_ALTERED) for sources without loaded_at_field. Conservative thresholds (warn_after 6 hours for proxy, not 1 hour) account for lag.
+**Avoids:** Static table timestamp errors (Pitfall 1), wrong timestamp column (Pitfall 2), timezone mismatch (Pitfall 3), freshness+build in same job (Pitfall 11)
 
-**Research Flag:** Standard dbt source freshness patterns. Skip `/gsd:research-phase`.
+**Complexity:** Low (1-2 hours). Standard dbt feature, mostly YAML configuration.
+
+**Research confidence:** HIGH. Freshness config location and syntax verified. Snowflake-specific guidance clear.
 
 ### Phase Ordering Rationale
 
-- **Tests before refactoring:** Phase 1 (tests) must precede Phase 3 (device ID fix) and Phase 4 (macro refactor) to catch regressions immediately. This prevents silent bugs in attribution logic.
-- **Audit before normalization:** Phase 2 (audit) must precede Phase 3 (fix) to avoid "fix based on assumptions" anti-pattern. Prevents weeks of rework if assumptions about device ID formats are wrong.
-- **Device ID fix before DRY refactor:** Phase 3 (normalization) must precede Phase 4 (macro) because device ID changes require full-refresh (high risk), while macro refactoring is low risk. Avoid combining high-risk changes.
-- **Core tests before expansion:** Phase 1 (critical tests) must precede Phase 5 (comprehensive tests) to avoid test failure paralysis. Forward-looking tests on new data first, then expand to historical data.
-- **Observability last:** Phase 6 (freshness/monitoring) comes after pipeline stabilizes. No point monitoring freshness if device mapping is broken or tests are failing.
+**Code quality → Validation → Monitoring** minimizes risk:
 
-**Critical path dependencies:**
-- Phase 1 → Phase 3 (tests must exist before device ID changes)
-- Phase 2 → Phase 3 (audit must inform normalization logic)
-- Phase 3 → Phase 4 (device mapping must stabilize before DRY refactor)
-- Phase 1 → Phase 5 (core tests must stabilize before expanding coverage)
+1. **Phase 4 first** — DRY refactor reduces technical debt before building on top of it. Tests in Phase 5 should validate clean macro logic, not duplicated CASE statements. Macro becomes available for future models.
+
+2. **Phase 5 second** — Tests validate refactored models and business logic before adding monitoring. High test coverage required before alerting (Phase 6) to avoid alert fatigue from known issues. Tests must pass before freshness alerts become actionable.
+
+3. **Phase 6 last** — Observability layer assumes stable, tested pipeline. Freshness alerts only valuable if data pipeline is validated (otherwise alerts fire on expected failures). Source freshness should monitor a pipeline with high test coverage.
+
+**Dependencies:** Each phase builds on previous. Cannot skip or reorder without increasing risk.
 
 ### Research Flags
 
-**Phases likely needing deeper research during planning:**
-- **Phase 2 (Device ID Audit):** IF Amplitude DEVICE_ID format is non-standard or requires complex fuzzy matching beyond simple UPPER/strip 'R' suffix, run `/gsd:research-phase` to investigate Amplitude device identifier documentation and find normalization examples.
-- **Phase 3 (Device ID Fix):** IF audit reveals unexpected device ID format (not UUID, not GPS_ADID), run `/gsd:research-phase` to research Snowflake fuzzy matching strategies (EDITDISTANCE, JAROWINKLER_SIMILARITY) and find implementation examples for probabilistic device ID matching.
+**Phases needing deeper research during planning:** None. All three phases have clear integration patterns with existing architecture.
 
 **Phases with standard patterns (skip research-phase):**
-- **Phase 1 (Test Foundation):** dbt generic tests (unique, not_null, relationships) are well-documented with extensive official examples. Use dbt-utils package (industry standard).
-- **Phase 4 (DRY Refactor):** dbt macros for CASE statement extraction are standard pattern with official documentation and many examples.
-- **Phase 5 (Expand Tests):** Singular tests and dbt-expectations package have comprehensive documentation. Elementary observability setup has official quickstart guide.
-- **Phase 6 (Source Freshness):** dbt source freshness is core feature with official docs. Snowflake metadata fallback (LAST_ALTERED) is documented workaround.
+- **Phase 4:** Native dbt macros well-documented. Consistency test pattern clear.
+- **Phase 5:** Singular test structure well-documented. Test organization patterns established.
+- **Phase 6:** Source freshness configuration verified. dbt Cloud job setup documented.
+
+**Confidence levels by phase:**
+- Phase 4 (DRY Refactor): HIGH confidence — Macro organization clear, dbt Cloud validation strategy verified
+- Phase 5 (Expand Test Coverage): HIGH confidence — Singular test structure clear, test organization patterns established
+- Phase 6 (Source Freshness): HIGH confidence — Freshness config syntax verified, dbt Cloud job setup documented
+
+**No deep research gaps.** All features use native dbt capabilities with clear documentation.
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | All package versions verified via dbt Package Hub and GitHub releases. Snowflake fuzzy matching functions confirmed as built-in. Amplitude/Adjust device ID documentation from official help centers. |
-| Features | HIGH | Feature categorization (table stakes, differentiators, anti-features) based on multiple dbt testing best practice sources (dbt Labs, Datafold, Elementary Data). Mobile attribution patterns confirmed via Adjust and Amplitude official docs. |
-| Architecture | HIGH | Three-layer dbt architecture (staging → intermediate → marts) is industry standard. Component responsibilities align with dbt best practices. Testing structure (co-located YAML, tests/ directory, test pyramid) documented in official dbt docs. |
-| Pitfalls | HIGH | All 6 pitfalls derived from documented issues in dbt incremental model testing, mobile device ID tracking challenges (ATT impact), and dbt testing adoption case studies. Recovery strategies based on dbt Community Forum discussions and vendor blogs. |
+| Stack | HIGH | All capabilities native to dbt or existing dbt-utils. Zero new packages. Official docs verified. |
+| Features | HIGH | Table stakes (macros, singular tests, freshness) and differentiators (consistency tests, hierarchical config) clearly defined. Anti-features identified. |
+| Architecture | HIGH | Integration points mapped to existing file structure. All three features fit standard dbt conventions. dbt Cloud validation strategy clear. |
+| Pitfalls | HIGH | Critical pitfalls identified with prevention strategies. Snowflake-specific guidance (timezone, case sensitivity) verified. WGT-specific constraints (no local dbt) addressed. |
 
 **Overall confidence:** HIGH
 
-Research is comprehensive and grounded in official documentation. All technology recommendations verified via primary sources (Package Hub, GitHub, official vendor docs). Pitfalls are documented in multiple sources (dbt Community Forum, vendor blogs, case studies), not theoretical. Architecture patterns align with dbt Labs official best practices.
-
 ### Gaps to Address
 
-Research identified 2 gaps that require validation during planning/execution:
+**Operational unknowns (resolve during Phase 6 execution):**
 
-- **Amplitude DEVICE_ID format specifics:** Research confirms Amplitude uses `device_id` (IDFV for iOS, custom for Android) but did NOT verify the exact format in WGT's specific Amplitude instance. The current 'R' suffix stripping logic suggests custom formatting. **Action:** Phase 2 audit must query actual DEVICE_ID values to confirm format before implementing normalization fix. If format is non-standard, run `/gsd:research-phase` for deeper investigation.
+1. **Actual Snowflake timestamp column types** — Research assumes LOAD_TIMESTAMP exists for Adjust S3 tables, but not verified. Impact: Timezone conversion requirements (TIMESTAMP_NTZ vs TIMESTAMP_LTZ). **Resolution:** Run `DESCRIBE TABLE` audit query before configuring freshness.
 
-- **Full_history_mode implementation in existing marts:** Research recommends using `{% if is_incremental() and not var('full_history_mode', false) %}` pattern to preserve D30 cohort windows during full-refresh, but WGT marts currently have hardcoded 35-day lookback filters. **Action:** Phase 3 must refactor date filtering logic in `mart_campaign_performance_full` and `mart_campaign_performance_full_mta` to support full_history_mode variable. Test that D30 metrics exist for cohorts 30+ days old after full-refresh with variable enabled.
+2. **Actual data refresh frequencies** — Research assumes Adjust S3 (6hr), Supermetrics (daily), Amplitude (12hr) based on typical patterns. Not verified with WGT. Impact: `warn_after` threshold configuration. **Resolution:** Ask data engineering team for SLAs, or observe MAX(LOAD_TIMESTAMP) patterns over 1 week.
 
-Both gaps are addressable during execution with minimal risk—they don't invalidate the core approach but require validation/adjustment based on actual project specifics.
+3. **network_mapping.csv completeness** — STATE.md says "coverage unknown". Impact: AD_PARTNER macro extraction (what happens for unmapped networks?). **Resolution:** Phase 4 must include coverage audit (SELECT DISTINCT NETWORK_NAME from staging, compare to seed) before macro extraction.
+
+**Architectural validations (resolve during Phase 4/5 execution):**
+
+4. **Incremental model lookback logic** — Research assumes 7-day lookback in MMM intermediate models, but not verified by reading model SQL. Impact: Test validation strategy (must account for overlapping date ranges). **Resolution:** Inspect `int_mmm__*.sql` files during Phase 5 to confirm is_incremental filter logic.
+
+5. **dbt Cloud dev environment permissions** — Research assumes ability to create jobs, run dbt source freshness, inspect compiled SQL. Not verified. Impact: Phase 6 freshness job creation. **Resolution:** Verify permissions before Phase 6 kickoff.
+
+**None of these gaps block planning.** All can be resolved during phase execution with < 30 minutes investigation each.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- [dbt Package Hub: dbt-utils 1.3.3](https://hub.getdbt.com/dbt-labs/dbt_utils/latest/) — Version confirmation, compatibility requirements
-- [dbt Package Hub: elementary 0.22.1](https://hub.getdbt.com/elementary-data/elementary/latest/) — Observability package version, capabilities
-- [dbt-expectations GitHub (Metaplane fork)](https://github.com/metaplane/dbt-expectations) — Active fork confirmation, dbt 1.7+ requirement, deprecation of original
-- [dbt Labs: Incremental models in-depth](https://docs.getdbt.com/best-practices/materializations/4-incremental-models) — Official best practices for incremental strategies, unique_key usage
-- [dbt Labs: Test smarter not harder](https://docs.getdbt.com/blog/test-smarter-where-tests-should-go) — Official testing strategy by layer (staging vs intermediate vs marts)
-- [dbt Labs: Source Freshness](https://docs.getdbt.com/docs/deploy/source-freshness) — Freshness configuration, loaded_at_field, Snowflake metadata fallback
-- [Adjust Help: Device Identifiers](https://help.adjust.com/en/article/device-identifiers) — GPS_ADID, IDFA, Android ID usage in Adjust
-- [Amplitude Docs: Identifying Users](https://help.amplitude.com/hc/en-us/articles/206404628-Step-2-Identifying-your-users) — device_id, user_id, amplitude_id reconciliation
-- [Amplitude Docs: Missing Mobile Attribution Events](https://amplitude.com/docs/faq/missing-mobile-attribution-events) — Attribution API, 72-hour window, device ID mapping
-- [DAS42: Fuzzy Matching in Snowflake](https://das42.com/thought-leadership/fuzzy-matching-in-snowflake/) — EDITDISTANCE, JAROWINKLER_SIMILARITY usage patterns, threshold recommendations
+
+**dbt Official Documentation:**
+- [Source freshness configuration](https://docs.getdbt.com/reference/resource-configs/freshness) — Freshness syntax, loaded_at_field, warn/error thresholds
+- [Deploy source freshness](https://docs.getdbt.com/docs/deploy/source-freshness) — dbt Cloud job setup
+- [Add sources to your DAG](https://docs.getdbt.com/docs/build/sources) — Source YAML structure
+- [Singular tests](https://docs.getdbt.com/docs/build/data-tests) — Tests directory structure
+- [Jinja and macros](https://docs.getdbt.com/docs/build/jinja-macros) — Macro syntax, best practices
+- [Configure incremental models](https://docs.getdbt.com/docs/build/incremental-models) — is_incremental() behavior
+- [Incremental models in-depth](https://docs.getdbt.com/best-practices/materializations/4-incremental-models) — Full refresh, lookback patterns
+- [dbt-utils package hub](https://hub.getdbt.com/dbt-labs/dbt_utils/latest/) — Version 1.3.3 details
+
+**Snowflake Official Documentation:**
+- [Identifier requirements](https://docs.snowflake.com/en/sql-reference/identifiers-syntax) — Case sensitivity rules
+- [CONVERT_TIMEZONE function](https://docs.snowflake.com/en/sql-reference/functions/convert_timezone) — Timezone handling
 
 ### Secondary (MEDIUM confidence)
-- [Datafold: 7 dbt Testing Best Practices](https://www.datafold.com/blog/7-dbt-testing-best-practices) — Forward-looking tests, test pyramid, avoiding false positives
-- [Elementary Data: dbt Tests - How to Write Fewer and Better](https://www.elementary-data.com/post/dbt-tests) — Strategic test placement, avoiding test bloat
-- [Ingest Labs: Mobile Device ID Tracking in 2026](https://ingestlabs.com/mobile-device-id-tracking-guide/) — ATT impact, IDFA opt-in rates (~25%), IDFV vs IDFA differences
-- [Metaplane: dbt Macros Guide](https://www.metaplane.dev/blog/dbt-macros) — When to use macros, DRY principles, avoiding over-abstraction
-- [Medium: DBT Models in Snowflake Best Practices](https://medium.com/@manik.ruet08/dbt-models-in-snowflake-best-practices-for-staging-intermediate-and-mart-layers-2abf37d08f65) — Layer-specific testing patterns, materialization strategies
-- [dbt Community Forum: Testing Incremental Models](https://discourse.getdbt.com/t/testing-incremental-models/1528) — Full-refresh validation, lookback window testing, idempotency checks
 
-### Tertiary (LOW confidence, needs validation)
-- WGT dbt project codebase analysis (2026-02-10) — Current state assessment (zero tests, duplicated CASE statements, Android 'R' suffix logic). **Validation needed:** Query actual device_id values in Amplitude EVENTS_726530 table to confirm format assumptions.
-- `.planning/codebase/CONCERNS.md` reference — Technical debt audit. **Validation needed:** Confirm device mapping diagnostics model exists and is currently used for monitoring.
+**Community Best Practices:**
+- [7 dbt Testing Best Practices](https://www.datafold.com/blog/7-dbt-testing-best-practices) — Singular vs generic tests, vacuous test detection
+- [dbt source freshness usage guide](https://www.datafold.com/blog/dbt-source-freshness) — loaded_at_field selection, ETL vs event timestamps
+- [Ultimate Guide to dbt Macros 2025](https://dagster.io/guides/ultimate-guide-to-dbt-macros-in-2025-syntax-examples-pro-tips) — Macro organization, testing strategies
+- [How to unit test macros in dbt](https://medium.com/glitni/how-to-unit-test-macros-in-dbt-89bdb5de8634) — Macro validation patterns
+- [Challenges with dbt Tests in Practice](https://datasettler.com/blog/post-4-dbt-pitfalls-in-practice/) — Brittle thresholds, alert fatigue
+
+**GitHub Issues & Forums:**
+- [dbt seed case sensitivity issue](https://github.com/dbt-labs/dbt-core/issues/7265) — Snowflake quote_columns behavior
+- [Using non-UTC timestamps for freshness](https://discourse.getdbt.com/t/using-a-non-utc-timestamp-when-calculating-source-freshness/1237) — Timezone conversion examples
+
+### Tertiary (Project-specific)
+
+- WGT dbt project REQUIREMENTS.md — TEST-06/07/08, FRESH-01/02/03, CODE-01/02 specifications
+- WGT dbt project STATE.md — network_mapping coverage unknown, device mapping staleness
+- Existing model files — v_stg_adjust__installs.sql, v_stg_adjust__touchpoints.sql (AD_PARTNER duplication verified)
 
 ---
-*Research completed: 2026-02-10*
+*Research completed: 2026-02-11*
 *Ready for roadmap: yes*

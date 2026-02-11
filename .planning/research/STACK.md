@@ -1,300 +1,463 @@
-# Stack Research: Device Mapping Fixes and dbt Testing
+# Technology Stack: v1.0 Remaining Work
 
-**Domain:** dbt + Snowflake mobile analytics data quality and device ID resolution
-**Researched:** 2026-02-10
+**Project:** WGT dbt Analytics v1.0 Data Integrity
+**Scope:** Stack additions for Phases 4-6 (DRY refactor, testing, source freshness)
+**Researched:** 2026-02-11
 **Confidence:** HIGH
 
-## Recommended Stack
+## Executive Summary
 
-### Core dbt Testing Packages
+The remaining v1.0 work requires **zero new packages or tools**. All needed capabilities exist in:
+1. **Native dbt features**: Source freshness, singular tests, macros
+2. **Existing dbt-utils** (already installed at version >=1.1.1)
 
-| Technology | Version | Purpose | Why Recommended |
-|------------|---------|---------|-----------------|
-| dbt-utils | 1.3.3 | Core utility macros and basic generic tests | Industry standard, maintained by dbt Labs. Required by other packages. Provides foundational tests (unique, not_null, relationships, accepted_values) plus utility macros used by dbt-expectations and elementary. Supports dbt >=1.3.0, <3.0.0. |
-| dbt-expectations | 0.10.9 | Advanced data quality tests inspired by Great Expectations | The de facto standard for comprehensive data quality testing in dbt. Provides 50+ tests including regex validation, statistical analysis, multi-column logic, distribution testing, and time-series checks. Active fork maintained by Metaplane after original was deprecated. Requires dbt >=1.7.x. |
-| elementary | 0.22.1 | Data observability, anomaly detection, and test result monitoring | dbt-native observability solution. Provides anomaly detection tests (freshness, volume, distribution, cardinality) and metadata tables to track test results over time. Integrates with dbt Cloud. OSS version includes Slack/Teams alerts. Supports dbt >=1.0.0, <3.0.0. |
+This is intentional stack discipline. Adding packages for these simple needs would create maintenance burden with no value.
 
-### Device ID Resolution Functions
+## Stack Status: No Changes Required
 
-| Technology | Version | Purpose | Why Recommended |
-|------------|---------|---------|-----------------|
-| Snowflake EDITDISTANCE | Built-in | Levenshtein distance fuzzy matching for device IDs | Snowflake native function for calculating character-level edit distance. Use for probabilistic matching when exact IDs don't match but are similar (typos, formatting differences). Returns integer distance - lower is better match. |
-| Snowflake JAROWINKLER_SIMILARITY | Built-in | Probabilistic string matching optimized for short strings | Snowflake native function returning 0-100 similarity score. Better than EDITDISTANCE for device IDs because it accounts for character transpositions and weighs matching prefixes more heavily. Use threshold of 85+ for high confidence matches. |
-| Custom dbt macro for ID normalization | N/A | Standardize GPS_ADID, IDFA, IDFV formats before matching | Write macro to UPPER(), TRIM(), remove hyphens/formatting from device IDs before joins. Adjust uses GPS_ADID (Google Play Services ID), Amplitude uses device_id (IDFV for iOS, generated string for Android). Normalization critical for match rate improvement. |
+### Already Installed (Continue Using)
 
-### Supporting dbt Testing Macros
+| Technology | Current Version | Purpose | Status |
+|------------|----------------|---------|--------|
+| dbt Cloud | N/A (SaaS) | Execution environment, job scheduling | ✓ Sufficient |
+| Snowflake | N/A (warehouse) | Data warehouse | ✓ Sufficient |
+| dbt-utils | >=1.1.1, <2.0.0 | Generic tests (unique_combination_of_columns, date_spine) | ✓ Sufficient |
 
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| dbt-audit-helper | Latest (deprecated, use dbt_artifacts) | Compare old vs new models during migration | Do NOT use - obsolete. Use dbt_artifacts instead for metadata collection. |
-| dbt_artifacts | Latest | Collect dbt run metadata and test results in data warehouse | Use if you need metadata tables beyond Elementary's capabilities. Creates mart layer with node-level execution metrics. However, Elementary provides similar functionality - evaluate if both are needed. |
+### NOT Adding (Explicitly Rejected)
 
-### Snowflake-Specific Capabilities
+| Technology | Reason NOT to Add |
+|------------|-------------------|
+| dbt-expectations | Overkill for simple MMM business rule tests. Singular tests are clearer. |
+| re_data / elementary | Too early for observability framework. Source freshness native checks sufficient. |
+| Additional test packages | Native singular tests + dbt-utils covers all TEST-06/07/08 needs |
+| Macro libraries | AD_PARTNER extraction is 18 lines. Writing custom macro > dependency |
 
-| Tool | Purpose | Notes |
-|------|---------|-------|
-| INFORMATION_SCHEMA metadata | Source freshness without loaded_at_field | dbt Core v1.7+ can use Snowflake's table metadata for freshness checks when source tables lack explicit timestamp columns. Configure in source YAML with `freshness: {warn_after: {count: 24, period: hour}}`. |
-| QUALIFY clause | Deduplication in device ID resolution | Use QUALIFY with ROW_NUMBER() for efficient deduplication when multiple matches exist. More performant than subqueries for finding best device ID match. |
+## Feature-to-Stack Mapping
 
-## Installation
+### Phase 4: DRY Refactor (CODE-01/02/04)
 
+**Requirement:** Extract duplicated AD_PARTNER CASE statement from v_stg_adjust__installs and v_stg_adjust__touchpoints.
+
+**Stack Used:**
+- **Native dbt macros** (no packages required)
+
+**Implementation:**
+```jinja
+-- macros/get_ad_partner.sql
+{% macro get_ad_partner(network_name_column) %}
+  CASE
+    WHEN {{ network_name_column }} IN ('Facebook Installs', 'Instagram Installs', 'Off-Facebook Installs', 'Facebook Messenger Installs') THEN 'Meta'
+    WHEN {{ network_name_column }} IN ('Google Ads ACE', 'Google Ads ACI', 'Google Organic Search', 'google') THEN 'Google'
+    WHEN {{ network_name_column }} IN ('TikTok SAN', 'TikTok_Paid_Ads_iOS', 'Tiktok Installs') THEN 'TikTok'
+    WHEN {{ network_name_column }} = 'Apple Search Ads' THEN 'Apple'
+    WHEN {{ network_name_column }} LIKE 'AppLovin%' THEN 'AppLovin'
+    WHEN {{ network_name_column }} LIKE 'UnityAds%' THEN 'Unity'
+    WHEN {{ network_name_column }} LIKE 'Moloco%' THEN 'Moloco'
+    WHEN {{ network_name_column }} LIKE 'Smadex%' THEN 'Smadex'
+    WHEN {{ network_name_column }} LIKE 'AdAction%' THEN 'AdAction'
+    WHEN {{ network_name_column }} LIKE 'Vungle%' THEN 'Vungle'
+    WHEN {{ network_name_column }} = 'Organic' THEN 'Organic'
+    WHEN {{ network_name_column }} = 'Unattributed' THEN 'Unattributed'
+    WHEN {{ network_name_column }} = 'Untrusted Devices' THEN 'Untrusted'
+    WHEN {{ network_name_column }} IN ('wgtgolf', 'WGT_Events_SocialPosts_iOS', 'WGT_GiftCards_Social') THEN 'WGT'
+    WHEN {{ network_name_column }} LIKE 'Phigolf%' THEN 'Phigolf'
+    WHEN {{ network_name_column }} LIKE 'Ryder%' THEN 'Ryder Cup'
+    ELSE 'Other'
+  END
+{% endmacro %}
+```
+
+**Usage in models:**
+```sql
+SELECT
+  ...
+  , {{ get_ad_partner('NETWORK_NAME') }} AS AD_PARTNER
+  ...
+FROM source
+```
+
+**Why this approach:**
+- **No dependencies**: Pure dbt macro, works in any dbt version
+- **Location**: `macros/get_ad_partner.sql` (standard dbt convention)
+- **Testing**: Consistency test validates identical output (see TEST-06)
+- **Readability**: CASE statement visible in compiled SQL, easier to debug than package abstraction
+
+**Current duplication:** Lines 65-83 in `v_stg_adjust__installs.sql` match lines 140-158 in `v_stg_adjust__touchpoints.sql` (18 identical lines)
+
+### Phase 5: Expand Test Coverage (TEST-06/07/08)
+
+**Requirement:** Singular tests for MMM models validating complex business rules.
+
+**Stack Used:**
+- **Native dbt singular tests** (tests/ directory)
+- **dbt-utils** (already installed) for generic tests on intermediate models
+
+**Implementation:**
+
+#### TEST-06: MMM Daily Summary Validation
+```sql
+-- tests/assert_mmm_daily_summary_has_all_metrics.sql
+-- Validates that each date+platform+channel has spend, installs, and revenue joined
+SELECT
+  DATE,
+  PLATFORM,
+  CHANNEL,
+  COUNT(*) as row_count
+FROM {{ ref('mmm__daily_channel_summary') }}
+WHERE SPEND IS NULL
+  OR INSTALLS IS NULL
+  OR REVENUE IS NULL
+GROUP BY 1, 2, 3
+HAVING COUNT(*) > 0
+```
+
+#### TEST-07: MMM Weekly Rollup Validation
+```sql
+-- tests/assert_mmm_weekly_aggregation_matches_daily.sql
+-- Validates that weekly rollup sums match daily detail
+WITH daily_totals AS (
+  SELECT
+    DATE_TRUNC('week', DATE) as week_start,
+    PLATFORM,
+    CHANNEL,
+    SUM(SPEND) as daily_spend,
+    SUM(INSTALLS) as daily_installs
+  FROM {{ ref('mmm__daily_channel_summary') }}
+  GROUP BY 1, 2, 3
+),
+weekly_totals AS (
+  SELECT
+    WEEK_START,
+    PLATFORM,
+    CHANNEL,
+    SPEND as weekly_spend,
+    INSTALLS as weekly_installs
+  FROM {{ ref('mmm__weekly_channel_summary') }}
+)
+SELECT
+  d.week_start,
+  d.platform,
+  d.channel,
+  ABS(d.daily_spend - w.weekly_spend) as spend_diff,
+  ABS(d.daily_installs - w.weekly_installs) as installs_diff
+FROM daily_totals d
+JOIN weekly_totals w
+  ON d.week_start = w.week_start
+  AND d.platform = w.platform
+  AND d.channel = w.channel
+WHERE ABS(d.daily_spend - w.weekly_spend) > 0.01
+  OR ABS(d.daily_installs - w.weekly_installs) > 0.01
+```
+
+#### TEST-08: AD_PARTNER Consistency After Macro Extraction
+```sql
+-- tests/assert_ad_partner_consistency.sql
+-- Validates that get_ad_partner() macro produces identical results to original CASE
+-- This test should PASS after CODE-01 refactor completes
+WITH installs_partners AS (
+  SELECT DISTINCT NETWORK_NAME, AD_PARTNER as installs_ad_partner
+  FROM {{ ref('v_stg_adjust__installs') }}
+),
+touchpoints_partners AS (
+  SELECT DISTINCT NETWORK_NAME, AD_PARTNER as touchpoints_ad_partner
+  FROM {{ ref('v_stg_adjust__touchpoints') }}
+)
+SELECT
+  COALESCE(i.NETWORK_NAME, t.NETWORK_NAME) as network_name,
+  i.installs_ad_partner,
+  t.touchpoints_ad_partner
+FROM installs_partners i
+FULL OUTER JOIN touchpoints_partners t
+  ON i.NETWORK_NAME = t.NETWORK_NAME
+WHERE i.installs_ad_partner != t.touchpoints_ad_partner
+  OR i.installs_ad_partner IS NULL
+  OR t.touchpoints_ad_partner IS NULL
+```
+
+**Why singular tests:**
+- **No package needed**: Native dbt feature, just write SQL in tests/
+- **Full SQL flexibility**: Complex joins, aggregations, window functions
+- **Business logic visibility**: Test SQL documents the business rule explicitly
+- **No YAML configuration**: Test runs automatically with `dbt test`
+- **Clear failure output**: Returns exact failing rows for debugging
+
+**Why NOT dbt-expectations:**
+- TEST-06/07/08 require multi-table joins and custom aggregation logic
+- dbt-expectations focuses on single-column constraints (ranges, regex, uniqueness)
+- Singular test SQL is clearer than wrapping complex logic in generic test YAML
+
+### Phase 6: Source Freshness & Observability (FRESH-01/02/03/04)
+
+**Requirement:** Monitor source data freshness for Adjust and Amplitude sources, detect stale static tables.
+
+**Stack Used:**
+- **Native dbt source freshness** (YAML configuration in sources)
+- **dbt Cloud job scheduler** (separate freshness job)
+
+**Implementation:**
+
+#### FRESH-01/02: Source Freshness Configuration
+
+**Adjust Sources** (update `models/staging/adjust/_adjust__sources.yml`):
 ```yaml
-# packages.yml
-packages:
-  # Core testing utilities (required first - other packages depend on it)
-  - package: dbt-labs/dbt_utils
-    version: 1.3.3
+version: 2
 
-  # Advanced data quality tests
-  - package: calogica/dbt-expectations
-    version: 0.10.9
-
-  # Data observability and anomaly detection
-  - package: elementary-data/elementary
-    version: 0.22.1
-```
-
-```bash
-# Install packages
-dbt deps
-
-# Initialize elementary (one-time setup)
-# Creates metadata schema and models
-dbt run --select elementary
-
-# Verify installation
-dbt test --select package:dbt_expectations package:elementary
-```
-
-```bash
-# Install elementary CLI for observability dashboard and alerts (optional)
-pip install elementary-data
-
-# Generate observability report
-edr report
-
-# Configure Slack alerts (optional)
-edr monitor --slack-webhook [webhook-url]
-```
-
-## Version Compatibility
-
-| Package | Compatible With | Notes |
-|---------|-----------------|-------|
-| dbt-utils 1.3.3 | dbt-core >=1.3.0, <3.0.0 | Fusion compatible. Required by dbt-expectations and elementary. |
-| dbt-expectations 0.10.9 | dbt-core >=1.7.x | Maintained by Metaplane (fork of deprecated calogica/dbt-expectations). Depends on dbt-utils. Works on Snowflake, BigQuery, Postgres, DuckDB. Spark support is experimental. |
-| elementary 0.22.1 | dbt-core >=1.0.0, <3.0.0 | Fusion compatible. Wider compatibility range than dbt-expectations. |
-| dbt Cloud | All versions above | Source freshness monitoring built into dbt Cloud UI. Configure in job settings with "Run source freshness" checkbox. |
-
-**Critical:** dbt-expectations requires dbt 1.7+. If project is on dbt <1.7, upgrade dbt first or use only dbt-utils and elementary.
-
-## Alternatives Considered
-
-| Recommended | Alternative | When to Use Alternative |
-|-------------|-------------|-------------------------|
-| dbt-expectations 0.10.9 (Metaplane fork) | dbt-expectations 0.8.x (original calogica) | NEVER - original is deprecated as of 2024-12-18. Active development moved to Metaplane fork. |
-| elementary 0.22.1 | re-data | If you need simpler setup with less feature depth. re-data is lighter weight but lacks anomaly detection and real-time monitoring capabilities. |
-| elementary OSS | Elementary Cloud | Use Cloud if you need: automated ML monitoring, column-level lineage from source to BI, built-in catalog, AI agents for reliability workflows. OSS sufficient for this project's monitoring needs. |
-| Snowflake fuzzy matching functions | External Python/UDF fuzzy matching | Snowflake native functions (EDITDISTANCE, JAROWINKLER_SIMILARITY) are significantly faster and don't require Python UDF setup. Only use external if you need algorithms not in Snowflake (soundex, metaphone). |
-| dbt source freshness | Elementary freshness anomaly tests | Use both. dbt source freshness validates SLA compliance. Elementary detects anomalous freshness patterns over time using ML. Complementary, not redundant. |
-| Custom ID normalization macro | Snowflake variant functions | For GPS_ADID/IDFA normalization, custom macros are clearer and more maintainable than nested Snowflake functions. Build once, reuse everywhere. |
-
-## What NOT to Use
-
-| Avoid | Why | Use Instead |
-|-------|-----|-------------|
-| dbt-audit-helper package | Obsolete - no longer developed | dbt_artifacts for metadata collection. For model comparison during migration, use Datafold's data-diff or build custom comparison tests with dbt-expectations. |
-| Probabilistic attribution in warehouse | Mobile attribution systems (Adjust) already do this with real-time context | Use deterministic matching on device IDs. Adjust attribution data already includes probabilistic modeling. Don't rebuild it in Snowflake. Focus on ID normalization and fuzzy matching for data quality issues only. |
-| Great Expectations (Python) in dbt pipeline | Adds Python dependency, slower execution, harder to maintain in dbt-native workflow | dbt-expectations provides same test types as native dbt tests. Run in dbt Cloud, version controlled with models, no separate orchestration needed. |
-| Soda Core for dbt projects | Separate tool, creates duplicate testing logic, team must learn another YAML syntax | dbt-expectations + elementary provide equivalent capabilities natively in dbt. Keep testing where transformations live. |
-| Custom UDFs for device ID matching | Slow, requires Python/Java, breaks down-funnel filtering in Snowflake | Snowflake native EDITDISTANCE and JAROWINKLER_SIMILARITY functions. Snowflake optimizes these internally. |
-| Copying all Amplitude data to match Adjust | Expensive compute and storage for marginal match rate improvement | Build device ID mapping table with fuzzy matching. Create intermediate model joining Adjust + Amplitude on multiple ID strategies (exact match → fuzzy match → fallback). |
-
-## Stack Patterns by Variant
-
-**If Android GPS_ADID != Amplitude device_id:**
-- Use UPPER() normalization first (Amplitude stores lowercase, Adjust may vary)
-- Build mapping table with ROW_NUMBER() QUALIFY to deduplicate
-- Try exact match on normalized GPS_ADID → Amplitude device_id
-- Fallback to JAROWINKLER_SIMILARITY >= 85 for high confidence fuzzy matches
-- Log unmatched records in separate model for manual review
-
-**If iOS IDFA match rate is low (1.4%):**
-- Check for IDFV usage (Amplitude uses IDFV when IDFA unavailable due to ATT)
-- Post-ATT, IDFA availability is ~25-30% - low match rate expected
-- Build user-level mapping using Amplitude user_id + session timestamps to bridge Adjust → Amplitude
-- Consider using Amplitude's Attribution API to push Adjust events into Amplitude instead of matching in warehouse
-- Document that 70%+ of iOS traffic is unattributable at device level due to ATT
-
-**If source freshness SLA is 1 hour or less:**
-- Run dbt Cloud freshness job every 30 minutes (2x frequency of lowest SLA)
-- Use "Run source freshness" checkbox in job settings (doesn't block downstream on failure)
-- Add elementary freshness anomaly tests to detect unexpected delays beyond SLA
-- Configure Slack alerts for error_after threshold breaches
-
-**If comprehensive test coverage is goal:**
-- Layer tests strategically: sources (basic hygiene) → staging (nulls, types, deduplication) → intermediate (joins, grain, enrichment) → marts (business logic, anomalies)
-- Use dbt-utils tests at all layers (unique, not_null, relationships, accepted_values)
-- Use dbt-expectations at intermediate/marts (regex, distributions, multi-column logic, time-series)
-- Use elementary at marts only (anomaly detection on production outputs)
-- Avoid testing same thing at multiple layers - test net-new columns and logic at each layer
-
-**If team is new to dbt testing:**
-- Start with dbt-utils 1.3.3 only - master built-in tests first
-- Add dbt-expectations 0.10.9 after 2-4 weeks when team is comfortable with test patterns
-- Add elementary 0.22.1 last - after test coverage is substantial
-- Elementary is most valuable when you have 50+ tests to monitor
-
-## Device ID Resolution Architecture Recommendation
-
-### Staging Layer
-- `stg_adjust__installs` - normalize GPS_ADID/IDFA with UPPER(), TRIM(), remove hyphens
-- `stg_amplitude__events` - normalize device_id with same logic
-- Tests: not_null on device IDs, accepted_values for platform, dbt-expectations regex for device ID format
-
-### Intermediate Layer
-- `int_device_id_mapping__exact_match` - GPS_ADID = device_id
-- `int_device_id_mapping__fuzzy_match` - JAROWINKLER_SIMILARITY >= 85 where exact match failed
-- `int_device_id_mapping__final` - UNION exact + fuzzy with match_type flag, deduplicated with QUALIFY
-- Tests: unique on mapping key, relationships tests to staging, dbt-expectations for match score distribution
-
-### Marts Layer
-- `mart_adjust_amplitude_bridge` - final device mapping with match quality metadata
-- `mart_unmatched_devices` - devices that failed all matching strategies for manual review
-- Tests: elementary anomaly tests on match rate %, volume tests, cardinality tests
-
-## Source Freshness Configuration
-
-```yaml
-# models/staging/adjust/_adjust__sources.yml
 sources:
   - name: adjust
     description: Adjust mobile attribution data
     database: ADJUST
     schema: S3_DATA
-    # Run freshness check every 30 min in dbt Cloud (2x the 1-hour SLA)
-    freshness:
-      warn_after: {count: 1, period: hour}
-      error_after: {count: 2, period: hour}
+    config:
+      freshness:
+        warn_after: {count: 6, period: hour}
+        error_after: {count: 12, period: hour}
     tables:
+      - name: IOS_ACTIVITY_INSTALL
+        description: iOS install events with attribution data
+        config:
+          loaded_at_field: CREATED_AT  # Epoch timestamp
+      - name: IOS_ACTIVITY_IMPRESSION
+        config:
+          loaded_at_field: CREATED_AT
+      - name: IOS_ACTIVITY_CLICK
+        config:
+          loaded_at_field: CREATED_AT
       - name: ANDROID_ACTIVITY_INSTALL
-        loaded_at_field: created_at  # Adjust timestamp field
-        # Override if this source has different SLA
-        # freshness:
-        #   warn_after: {count: 24, period: hour}
+        config:
+          loaded_at_field: CREATED_AT
+      - name: ANDROID_ACTIVITY_IMPRESSION
+        config:
+          loaded_at_field: CREATED_AT
+      - name: ANDROID_ACTIVITY_CLICK
+        config:
+          loaded_at_field: CREATED_AT
 
-# models/staging/amplitude/_amplitude__sources.yml
-sources:
-  - name: amplitude
-    database: AMPLITUDE
-    schema: EVENTS
-    freshness:
-      warn_after: {count: 1, period: hour}
-      error_after: {count: 2, period: hour}
+  - name: adjust_api_data
+    description: Adjust API aggregated report data
+    database: ADJUST
+    schema: API_DATA
+    config:
+      freshness:
+        warn_after: {count: 12, period: hour}
+        error_after: {count: 24, period: hour}
     tables:
-      - name: events
-        loaded_at_field: event_time
+      - name: REPORT_DAILY_RAW
+        description: Daily aggregated campaign performance data from Adjust API
+        config:
+          loaded_at_field: DATE  # Date field proxy
 ```
 
-## dbt Cloud Job Configuration
+**Amplitude Sources** (update `models/staging/amplitude/_amplitude__sources.yml`):
+```yaml
+version: 2
 
-**Job 1: Source Freshness Monitor (every 30 min)**
-- Commands: `dbt source freshness`
-- Schedule: Cron `*/30 * * * *` (every 30 minutes)
-- Do NOT check "Run source freshness" - this IS the freshness job
-- Alerts: Slack on error_after breach
+sources:
+  - name: amplitude
+    description: Amplitude product analytics data
+    database: AMPLITUDEANALYTICS_AMPLITUDE_DB_364926_SHARE
+    schema: SCHEMA_726530
+    config:
+      freshness:
+        warn_after: {count: 6, period: hour}
+        error_after: {count: 12, period: hour}
+    tables:
+      - name: MERGE_IDS_726530
+        description: Device ID to User ID mapping
+        config:
+          loaded_at_field: SERVER_UPLOAD_TIME  # Amplitude metadata
+      - name: EVENTS_726530
+        description: All product events
+        config:
+          loaded_at_field: SERVER_UPLOAD_TIME
+```
 
-**Job 2: Production Run (every 1 hour)**
-- Commands: `dbt build --select state:modified+` (uses state for efficiency)
-- Schedule: Cron `0 * * * *` (top of every hour)
-- Check "Run source freshness" checkbox - runs before build, doesn't block on failure
-- Run after: Job 1 (waits for freshness check)
+**Configuration notes:**
+- **loaded_at_field**: Column representing when data arrived (not event timestamp)
+  - Adjust uses `CREATED_AT` (epoch timestamp of S3 load)
+  - Amplitude uses `SERVER_UPLOAD_TIME` (Amplitude ingestion timestamp)
+  - API data uses `DATE` as proxy (no ingestion timestamp available)
+- **warn_after/error_after**: Configurable thresholds
+  - Event data: 6h warn, 12h error (near real-time expectation)
+  - API data: 12h warn, 24h error (daily batch process)
+- **No filter needed**: Default checks MAX(loaded_at_field) < current_timestamp - threshold
 
-**Job 3: Elementary Monitoring (every 6 hours)**
-- Commands: `dbt run --select elementary` then `dbt test`
-- Schedule: Cron `0 */6 * * *` (every 6 hours)
-- Generates metadata for elementary dashboard
-- Configure elementary CLI separately to pull metadata and send Slack alerts
+#### FRESH-03: Stale Static Table Detection
 
-## Testing Strategy by Layer
+**Approach:** Use source freshness on static seed or intermediate table with custom loaded_at_field
 
-### Sources (Adjust, Amplitude raw tables)
-- **Tests:** Basic hygiene only - flag source system issues
-- **dbt-utils:** None (can't add tests to sources, only freshness)
-- **dbt-expectations:** None
-- **elementary:** Freshness anomaly detection on critical sources
-- **Goal:** Identify upstream data quality issues
+**Option 1 - Add metadata column to seed:**
+```yaml
+# models/staging/adjust/_adjust__sources.yml
+sources:
+  - name: adjust_static
+    description: Static reference tables
+    database: ADJUST
+    schema: S3_DATA
+    config:
+      freshness:
+        warn_after: {count: 30, period: day}
+        error_after: {count: 45, period: day}
+    tables:
+      - name: ADJUST_AMPLITUDE_DEVICE_MAPPING
+        config:
+          loaded_at_field: LAST_UPDATED  # Requires adding timestamp column
+```
 
-### Staging (stg_adjust__*, stg_amplitude__*)
-- **Tests:** Data type validation, nulls on critical columns, deduplication
-- **dbt-utils:** not_null (device IDs, timestamps), unique (event IDs)
-- **dbt-expectations:** expect_column_values_to_match_regex (device ID format), expect_column_values_to_be_in_type_list
-- **elementary:** Volume anomaly detection (sudden drop/spike in row count)
-- **Goal:** Clean, typed, deduplicated inputs for downstream models
+**Option 2 - Query warehouse metadata:**
+```sql
+-- tests/assert_device_mapping_not_stale.sql
+-- Singular test checking table last modified time
+SELECT
+  DATEDIFF(day, MAX(LAST_ALTERED), CURRENT_TIMESTAMP()) as days_stale
+FROM ADJUST.INFORMATION_SCHEMA.TABLES
+WHERE TABLE_SCHEMA = 'S3_DATA'
+  AND TABLE_NAME = 'ADJUST_AMPLITUDE_DEVICE_MAPPING'
+HAVING days_stale > 30
+```
 
-### Intermediate (int_device_id_mapping__*, int_mta__*)
-- **Tests:** Grain validation, join logic verification, enrichment checks
-- **dbt-utils:** unique (composite keys after joins), relationships (foreign key validation), accepted_values (match_type, platform)
-- **dbt-expectations:** expect_column_pair_values_A_to_be_greater_than_B (timestamp ordering), expect_compound_columns_to_be_unique, expect_column_quantile_values_to_be_between (match score distribution)
-- **elementary:** Cardinality anomaly detection (unexpected fan-out from joins)
-- **Goal:** Verify transformation logic produces expected grain and relationships
+**Recommendation:** Use Option 2 (singular test) because:
+- No schema changes to static table required
+- Snowflake INFORMATION_SCHEMA.TABLES.LAST_ALTERED is reliable
+- Test runs with standard `dbt test` (no separate job needed)
+- Clear failure message: "Table stale for X days"
 
-### Marts (mart_campaign_performance_*, mart_adjust_amplitude_bridge)
-- **Tests:** Business logic validation, anomaly detection, critical business rules
-- **dbt-utils:** not_null (revenue, user counts), unique (campaign + date), relationships (to dimension tables)
-- **dbt-expectations:** expect_column_values_to_be_between (reasonable ranges for spend, ROAS), expect_column_mean_to_be_between (average session length), expect_row_values_to_have_recent_data (ensure data pipeline is current)
-- **elementary:** All anomaly types (freshness, volume, schema changes, distribution shifts in KPIs)
-- **Goal:** Protect production data quality, alert on unexpected changes
+#### FRESH-04: Dedicated Freshness Job in dbt Cloud
 
-## Performance Considerations
+**Job Configuration:**
+- **Job name:** "Source Freshness Check"
+- **Commands:** `dbt source freshness`
+- **Schedule:** Every 6 hours (2x frequency of lowest SLA)
+- **Execution settings:**
+  - Run on schedule (not triggered by other jobs)
+  - Separate from model build jobs
+  - Send alerts on failure
+- **Target:** Production environment
 
-**Test execution time:**
-- dbt-utils tests: Fast (compiled to simple SQL)
-- dbt-expectations statistical tests: Slower (aggregations, windows). Limit to marts.
-- elementary anomaly tests: Slower (compare to historical baseline). Run on schedule, not every dbt run.
+**Why separate job:**
+- Freshness failures should NOT block model builds
+- Different execution cadence (freshness runs 4x/day, builds run 1x/day)
+- Alerts go to different stakeholders (data engineering vs analytics)
+- `dbt source freshness` writes results to `target/sources.json` for tracking
 
-**Fuzzy matching optimization:**
-- Block/partition before fuzzy matching (e.g., match within platform + date range)
-- Fuzzy match only after exact match fails (reduces comparison pairs by 90%+)
-- Set similarity threshold high (>=85) to avoid false positives
-- Use QUALIFY to deduplicate matches in same query (faster than subquery)
+**dbt Cloud setup:**
+1. Create new Deploy Job
+2. Commands: `dbt source freshness`
+3. Schedule: Cron expression `0 */6 * * *` (every 6 hours)
+4. Enable "Send email on failure" to data engineering team
 
-**Incremental testing:**
-- Use `dbt test --select state:modified+` in CI to test only changed models
-- Full test suite on production schedule (every 6 hours)
-- Source freshness every 30 min (independent of model builds)
+**Why native dbt source freshness:**
+- **No package needed**: Built into dbt-core since v0.18.0
+- **dbt Cloud integration**: Native UI showing freshness status
+- **Snowflake optimized**: Uses INFORMATION_SCHEMA when loaded_at_field not specified
+- **Zero-config alerting**: dbt Cloud email notifications on error_after threshold
+
+**Why NOT re_data or elementary:**
+- Those packages require:
+  - Additional models (artifact tracking tables)
+  - Separate deployment job for observability models
+  - Configuration learning curve
+- Native source freshness gives same value for this use case:
+  - Detects stale data
+  - Sends alerts
+  - Logs results (sources.json)
+- Defer advanced observability until v2.0 (if needed)
+
+## Package Version Recommendations
+
+### Keep Current: dbt-utils
+
+**Current spec:** `>=1.1.1, <2.0.0`
+
+**Latest version:** 1.3.3 (released 2024-12-11)
+
+**Recommendation:** Upgrade to pin to 1.3.3
+```yaml
+# packages.yml
+packages:
+  - package: dbt-labs/dbt_utils
+    version: 1.3.3
+```
+
+**Why upgrade:**
+- Fixes time filter bug in source_column_name (affects date_spine usage)
+- Better union_relations compile mode handling
+- Still compatible with dbt-core <3.0.0 (same range as current spec)
+- Patch upgrade (1.1.1 → 1.3.3) is low risk
+
+**Migration impact:** None (backward compatible patch)
+
+### NOT Installing
+
+**Explicitly rejected packages for Phases 4-6:**
+
+| Package | Why NOT Adding |
+|---------|---------------|
+| dbt-expectations | 67 macros, 400KB+ dependency for 3 simple tests. Singular SQL clearer. |
+| re_data | Requires dbt run for observability models. Native freshness sufficient. |
+| elementary | 30+ models for monitoring. Too early, revisit at v2.0 if needed. |
+| dbt-date | Only use date_spine from dbt-utils. Don't need fiscal calendar macros. |
+| dbt-audit-helper | For migration validation. Not applicable (not migrating platforms). |
+
+## Installation
+
+**No new installations required.** Optionally upgrade existing package:
+
+```bash
+# In dbt Cloud or local (if applicable):
+# 1. Update packages.yml to pin dbt-utils to 1.3.3
+# 2. Run package install
+dbt deps
+```
+
+**Expected output:**
+```
+Installing dbt-labs/dbt_utils@1.3.3
+  Installed from version 1.3.3
+```
+
+## Validation Checklist
+
+After implementing Phases 4-6, verify stack usage:
+
+- [ ] **Phase 4:** Custom macro in `macros/get_ad_partner.sql` works (compile succeeds)
+- [ ] **Phase 5:** Singular tests in `tests/*.sql` run with `dbt test` (no package imports)
+- [ ] **Phase 6:** Source freshness YAML added to `_adjust__sources.yml` and `_amplitude__sources.yml`
+- [ ] **Phase 6:** `dbt source freshness` runs successfully in dbt Cloud job
+- [ ] **Phase 6:** Stale table test in `tests/assert_device_mapping_not_stale.sql` works
+- [ ] **Zero new packages:** `dbt deps` output shows only dbt-utils (no new dependencies)
+
+## Stack Discipline Rationale
+
+This research explicitly avoids the "add a package" reflex. Key principles:
+
+1. **Native first**: If dbt-core has the feature, use it (macros, singular tests, source freshness)
+2. **Justify dependencies**: Only add packages when native approach significantly worse
+3. **Test simplicity**: Complex test logic → singular SQL, not generic test macros
+4. **Macro simplicity**: 18-line CASE statement → custom macro, not package abstraction
+5. **Defer complexity**: Save observability frameworks for v2.0 when ROI proven
+
+**Cost of this discipline:**
+- More files (tests/*.sql vs schema.yml entries)
+- Custom macro instead of package function
+
+**Benefit of this discipline:**
+- Zero new dependencies to maintain
+- Zero new dbt Cloud compatibility risk
+- Full SQL visibility (no package black boxes)
+- Faster CI (no additional package downloads)
 
 ## Sources
 
-### Package Versions and Compatibility
-- [dbt-utils Package Hub](https://hub.getdbt.com/dbt-labs/dbt_utils/latest/) - Version 1.3.3 confirmed, dbt >=1.3.0 requirement (HIGH confidence)
-- [dbt-expectations GitHub (Metaplane fork)](https://github.com/metaplane/dbt-expectations) - Version 0.10.9, dbt >=1.7.x requirement, deprecation of original package (HIGH confidence)
-- [elementary Package Hub](https://hub.getdbt.com/elementary-data/elementary/latest/) - Version 0.22.1, dbt >=1.0.0 compatibility (HIGH confidence)
-- [elementary GitHub](https://github.com/elementary-data/elementary) - OSS capabilities, installation process (HIGH confidence)
+**Official dbt Documentation:**
+- [Source freshness configuration](https://docs.getdbt.com/reference/resource-configs/freshness) - Freshness syntax
+- [Deploy source freshness](https://docs.getdbt.com/docs/deploy/source-freshness) - dbt Cloud job setup
+- [Singular tests](https://docs.getdbt.com/docs/build/data-tests) - Tests directory structure
+- [Jinja and macros](https://docs.getdbt.com/docs/build/jinja-macros) - Macro syntax
+- [Source properties](https://docs.getdbt.com/reference/source-properties) - loaded_at_field reference
+- [dbt-utils package hub](https://hub.getdbt.com/dbt-labs/dbt_utils/latest/) - Version 1.3.3 details
 
-### dbt Testing Best Practices
-- [Test smarter not harder: Where should tests go in your pipeline?](https://docs.getdbt.com/blog/test-smarter-where-tests-should-go) - Official dbt Labs testing strategy by layer (HIGH confidence)
-- [dbt Source Freshness Documentation](https://docs.getdbt.com/docs/deploy/source-freshness) - Freshness configuration, scheduling recommendations (HIGH confidence)
-- [DBT Models in Snowflake: Best Practices](https://medium.com/@manik.ruet08/dbt-models-in-snowflake-best-practices-for-staging-intermediate-and-mart-layers-2abf37d08f65) - Layer-specific testing patterns (MEDIUM confidence)
-- [dbt Packages Documentation](https://docs.getdbt.com/docs/build/packages) - Version pinning best practices (HIGH confidence)
-
-### Mobile Attribution and Device ID Resolution
-- [Adjust Device Identifiers Help](https://help.adjust.com/en/article/device-identifiers) - GPS_ADID, IDFA, Android ID usage in Adjust (HIGH confidence)
-- [Amplitude User Identification](https://help.amplitude.com/hc/en-us/articles/206404628-Step-2-Identifying-your-users) - device_id, user_id, amplitude_id reconciliation (HIGH confidence)
-- [Amplitude Adjust Integration](https://amplitude.com/docs/data/destination-catalog/adjust) - Attribution API, device ID mapping between systems (HIGH confidence)
-- [Understanding Mobile Device ID Tracking 2026](https://ingestlabs.com/mobile-device-id-tracking-guide/) - ATT impact, IDFA opt-in rates, 2026 context (MEDIUM confidence)
-- [Probabilistic Attribution](https://www.singular.net/glossary/probabilistic-attribution/) - Deterministic vs probabilistic matching approaches (MEDIUM confidence)
-
-### Snowflake Fuzzy Matching
-- [Fuzzy matching in Snowflake | DAS42](https://das42.com/thought-leadership/fuzzy-matching-in-snowflake/) - EDITDISTANCE, JAROWINKLER_SIMILARITY usage patterns (HIGH confidence)
-- [Fuzzy Match Strings using SQL in Snowflake](https://medium.com/@itsdaniyalm/fuzzy-match-strings-using-sql-in-snowflake-a32bbc4b1fb7) - Implementation examples (MEDIUM confidence)
-
-### Data Quality and Observability Landscape
-- [The 2026 Open-Source Data Quality and Data Observability Landscape](https://datakitchen.io/the-2026-open-source-data-quality-and-data-observability-landscape/) - Ecosystem overview, elementary vs alternatives (MEDIUM confidence)
-- [Add observability to your dbt project: Top 3 dbt testing packages](https://www.elementary-data.com/post/add-observability-to-your-dbt-project-top-3-dbt-testing-packages) - Elementary + dbt-expectations + dbt-utils stack justification (MEDIUM confidence)
-- [Data Observability dbt Packages](https://infinitelambda.com/data-observability-dbt-packages/) - dbt_artifacts vs elementary comparison (MEDIUM confidence)
-
----
-*Stack research for: WGT Golf dbt Analytics - Device Mapping Fixes and Comprehensive Testing*
-*Researched: 2026-02-10*
-*Confidence: HIGH - All package versions verified via official sources (Package Hub, GitHub). Device ID resolution patterns confirmed via Adjust and Amplitude official documentation. Snowflake fuzzy matching functions verified as built-in capabilities.*
+**Community Resources:**
+- [dbt-utils releases](https://github.com/dbt-labs/dbt-utils/releases) - Version changelog
+- [Ultimate Guide to dbt Macros 2025](https://dagster.io/guides/ultimate-guide-to-dbt-macros-in-2025-syntax-examples-pro-tips) - Best practices
+- [7 dbt Testing Best Practices](https://www.datafold.com/blog/7-dbt-testing-best-practices) - Singular vs generic tests
+- [dbt Source Freshness Guide](https://www.secoda.co/learn/dbt-source-freshness) - loaded_at_field examples

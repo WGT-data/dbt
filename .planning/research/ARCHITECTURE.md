@@ -1,796 +1,1128 @@
-# Architecture Research: Device Mapping Fixes & dbt Testing Integration
+# Architecture Integration: Pipeline Hardening Features
 
-**Domain:** dbt Analytics Pipeline (Snowflake + Mobile Attribution)
-**Researched:** 2026-02-10
-**Confidence:** HIGH
+**Project:** WGT dbt Analytics v1.0
+**Research Focus:** Integration of source freshness, singular tests, and macro extraction with existing architecture
+**Researched:** 2026-02-11
+**Overall Confidence:** HIGH
 
-## Standard Architecture: Three-Layer dbt Pipeline
+## Executive Summary
 
-### System Overview
+This research addresses how three pipeline hardening features integrate with the existing WGT dbt project architecture:
+
+1. **Source Freshness Monitoring** — Configurations live in existing `_sources.yml` files, no new components needed
+2. **Singular Tests** — New `.sql` files in `tests/` directory, organized by domain (tests/mmm/, tests/mta/)
+3. **AD_PARTNER Macro Extraction** — New macro file in `macros/` directory, replaces duplicated CASE logic
+
+**Key architectural finding:** All three features integrate cleanly with existing dbt project structure through standard dbt conventions. No structural changes required — only new files added to existing directories.
+
+## Existing Architecture Overview
+
+### Current Layer Structure
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                          MARTS (Business Layer)                          │
-│  ┌──────────────────────┐  ┌──────────────────────┐  ┌────────────────┐│
-│  │ mart_network_        │  │ mart_campaign_       │  │ attribution__  ││
-│  │ performance_mta      │  │ performance_full_mta │  │ *              ││
-│  └──────────┬───────────┘  └──────────┬───────────┘  └────────┬───────┘│
-│             │                          │                       │        │
-├─────────────┴──────────────────────────┴───────────────────────┴────────┤
-│                      INTERMEDIATE (Complex Logic)                        │
-│  ┌──────────────────┐  ┌──────────────────┐  ┌─────────────────────┐   │
-│  │ int_mta__        │  │ int_adjust_      │  │ int_device_mapping__││
-│  │ user_journey     │  │ amplitude__      │  │ diagnostics         ││
-│  │                  │  │ device_mapping   │  │                     ││
-│  └────────┬─────────┘  └────────┬─────────┘  └──────────┬──────────┘   │
-│           │                     │                        │              │
-├───────────┴─────────────────────┴────────────────────────┴──────────────┤
-│                       STAGING (Source Normalization)                     │
-│  ┌───────────────┐  ┌───────────────┐  ┌──────────────────────────┐    │
-│  │ v_stg_adjust__│  │ v_stg_        │  │ stg_adjust__             │    │
-│  │ installs      │  │ amplitude__   │  │ [platform]_activity_*    │    │
-│  │ touchpoints   │  │ merge_ids     │  │                          │    │
-│  └───────┬───────┘  └───────┬───────┘  └───────┬──────────────────┘    │
-│          │                  │                   │                       │
-├──────────┴──────────────────┴───────────────────┴───────────────────────┤
-│                           SOURCES (Raw Data)                             │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌─────────────┐ │
-│  │ adjust.      │  │ amplitude.   │  │ network_     │  │ adjust_api_ │ │
-│  │ S3_DATA      │  │ EVENTS_*     │  │ mapping.csv  │  │ data.       │ │
-│  └──────────────┘  └──────────────┘  └──────────────┘  └─────────────┘ │
-└─────────────────────────────────────────────────────────────────────────┘
+sources (YAML configs)
+  ↓
+staging (views)
+  - v_stg_adjust__installs
+  - v_stg_adjust__touchpoints
+  - stg_supermetrics__adj_campaign
+  - stg_adjust__report_daily
+  ↓
+intermediate (incremental tables at int_mmm__*, table otherwise)
+  - int_mmm__daily_channel_spend
+  - int_mmm__daily_channel_installs
+  - int_mmm__daily_channel_revenue
+  - int_mta__user_journey
+  - int_mta__touchpoint_credit
+  ↓
+marts (tables)
+  - mmm__daily_channel_summary
+  - mmm__weekly_channel_summary
+  - mart_campaign_performance (MTA)
+  - mart_network_comparison (MTA)
 ```
 
-### Layer Responsibilities
+### Current File Organization
 
-| Layer | Responsibility | Materialization | When to Modify |
-|-------|----------------|-----------------|----------------|
-| **Staging** | Source normalization, light transforms, rename columns | `view` | Adding/fixing source references, standardizing field names |
-| **Intermediate** | Complex joins, device mapping, user journeys, credit attribution | `table` (incremental) | Business logic changes, new calculated fields, join fixes |
-| **Marts** | Business-facing aggregations, reporting-ready tables | `table` (incremental) | New aggregation levels, dashboard requirements |
-| **Seeds** | Static reference data (network mappings, config) | `seed` | Network name standardization, lookup table updates |
-| **Macros** | Reusable SQL snippets, schema routing, duplicate code | N/A | DRY violations, environment config, shared logic |
+```
+models/
+  staging/
+    adjust/
+      _adjust__sources.yml        ← Source definitions
+      _adjust__models.yml         ← Model properties + tests
+      v_stg_adjust__installs.sql  ← Has duplicated AD_PARTNER CASE
+      v_stg_adjust__touchpoints.sql ← Has duplicated AD_PARTNER CASE
+    amplitude/
+      _amplitude__sources.yml
+      _amplitude__models.yml
+    supermetrics/
+      _supermetrics__sources.yml
+    revenue/
+      _revenue__sources.yml
+  intermediate/
+    _int_mmm__models.yml
+    int_mmm__daily_channel_spend.sql  ← Incremental
+    int_mmm__daily_channel_installs.sql ← Incremental
+    int_mmm__daily_channel_revenue.sql ← Incremental
+  marts/
+    mmm/
+      _mmm__models.yml
+      mmm__daily_channel_summary.sql  ← Table
+      mmm__weekly_channel_summary.sql ← Table
 
-## NEW Components for Device Mapping Fixes
+macros/
+  generate_schema_name.sql       ← Environment-based schema routing
+  get_source_schema.sql
+  setup_dev_views.sql
 
-### 1. Macro: `map_ad_partner()` (NEW)
+tests/
+  .gitkeep                        ← Empty (no singular tests yet)
 
-**What:** Centralized CASE statement for AD_PARTNER mapping
-**Where:** `/Users/riley/Documents/GitHub/wgt-dbt/macros/map_ad_partner.sql`
-**Why:** Eliminates duplicate 18-line CASE statement in v_stg_adjust__installs and v_stg_adjust__touchpoints
-
-**Integration Points:**
-- Called by `v_stg_adjust__installs.sql` (line 65-83 → macro call)
-- Called by `v_stg_adjust__touchpoints.sql` (line 136-154 → macro call)
-- Returns standardized AD_PARTNER from NETWORK_NAME
-
-**Example:**
-```sql
-{% macro map_ad_partner(network_name_column) %}
-    CASE
-        WHEN {{ network_name_column }} IN ('Facebook Installs', 'Instagram Installs', ...) THEN 'Meta'
-        WHEN {{ network_name_column }} IN ('Google Ads ACE', 'Google Ads ACI', ...) THEN 'Google'
-        ...
-        ELSE 'Other'
-    END
-{% endmacro %}
+seeds/
+  network_mapping.csv             ← Channel taxonomy for AD_PARTNER mapping
 ```
 
-**Impact:**
-- Reduces code duplication by 36 lines
-- Single source of truth for partner mapping
-- Future network additions only need one update
+### Critical Integration Points
 
-### 2. Staging Model: `v_stg_amplitude__merge_ids.sql` (MODIFIED)
+**AD_PARTNER Duplication:**
+- Lines 65-83 in `v_stg_adjust__installs.sql`
+- Lines 140-158 in `v_stg_adjust__touchpoints.sql`
+- Identical 18-line CASE statement mapping NETWORK_NAME → AD_PARTNER
+- Used by downstream MMM models via `AD_PARTNER` column
 
-**Current State:** Strips 'R' suffix from Android DEVICE_ID, uppercases iOS IDFV
-**Issue:** Android match rate is poor because logic assumes Amplitude device_id = Adjust GPS_ADID with 'R' suffix
+**Incremental Model Pattern:**
+- MMM intermediate models use `incremental` materialization with 7-day lookback
+- Pattern: `WHERE DATE >= DATEADD(day, -7, (SELECT MAX(DATE) FROM {{ this }}))`
+- Critical for freshness: Models must have recent data to avoid stale metrics
 
-**Device ID Fix Required:**
-```sql
--- CURRENT (line 50-54):
-UPPER(
-    IFF(PLATFORM = 'Android' AND RIGHT(DEVICE_ID, 1) = 'R'
-       , LEFT(DEVICE_ID, LENGTH(DEVICE_ID) - 1)
-       , DEVICE_ID
-    )
-) AS DEVICE_ID_UUID
+**Test Coverage Status:**
+- Generic tests exist in `_models.yml` files (uniqueness, not_null, accepted_values)
+- No singular tests currently exist
+- dbt_utils.unique_combination_of_columns used for composite keys
 
--- NEEDS INVESTIGATION:
--- 1. Verify Amplitude device_id format for Android (UUID? GPS_ADID?)
--- 2. Verify Adjust GPS_ADID format (uppercase UUID per v_stg_adjust__installs line 29)
--- 3. Test match rates with different normalization strategies
--- 4. Document actual format in model comments
-```
+## Feature 1: Source Freshness Configuration
 
-**Integration Points:**
-- Input: `source('amplitude', 'EVENTS_726530')` → DEVICE_ID, USER_ID, PLATFORM
-- Output: `int_adjust_amplitude__device_mapping` (line 14)
-- Downstream: All revenue attribution depends on this mapping quality
+### Integration Architecture
 
-### 3. Intermediate Model: `int_adjust_amplitude__device_mapping.sql` (MODIFIED)
+**Location:** Add `freshness` configs to **existing** `_sources.yml` files in `models/staging/` directories.
 
-**Current State:** Simple passthrough with 7-day incremental lookback
-**Issue:** No validation of mapping quality, no duplicate handling
+**No new files required.** Freshness configs are properties of source definitions, not separate components.
 
-**Enhancement Required:**
-```sql
--- ADD: Deduplication logic if multiple Amplitude users share a device
--- ADD: Validation that ADJUST_DEVICE_ID matches expected format
--- ADD: Logging of unmappable records for diagnostics
-```
+### YAML Structure
 
-**Integration Points:**
-- Input: `ref('v_stg_amplitude__merge_ids')` → normalized device IDs
-- Output: Used by revenue models (not in MTA pipeline, but critical for ROAS)
-- Testing: Primary key test on `[ADJUST_DEVICE_ID, AMPLITUDE_USER_ID, PLATFORM]`
+Source freshness configurations use this structure within existing source YAML files:
 
-### 4. Diagnostic Model: `int_device_mapping__diagnostics.sql` (EXISTING)
-
-**Purpose:** Data quality table for multi-device users
-**Materialization:** `table` (not incremental - full refresh for accuracy)
-
-**Current State:** Already built, surfaces users with 100+ devices as anomalies
-**No Changes Required:** This is a monitoring table, not part of pipeline DAG
-
-**Usage:** Business users query this to identify test accounts, fraud, shared devices
-
-### 5. Diagnostic Model: `int_device_mapping__distribution_summary.sql` (EXISTING)
-
-**Purpose:** Executive summary of device mapping quality
-**Materialization:** `table` (full refresh)
-
-**Current State:** Already built, shows user distribution across device count buckets
-**No Changes Required:** This is a reporting table, not part of pipeline DAG
-
-**Usage:** Stakeholder communication about data quality and match rates
-
-## NEW Components for dbt Testing
-
-### 6. Model YAML Configs (MODIFIED - Multiple Files)
-
-**Pattern:** Co-locate tests with models in same directory
-
-**Files to Modify:**
-- `/Users/riley/Documents/GitHub/wgt-dbt/models/staging/adjust/_adjust__sources.yml`
-- `/Users/riley/Documents/GitHub/wgt-dbt/models/staging/amplitude/_amplitude__sources.yml`
-- `/Users/riley/Documents/GitHub/wgt-dbt/models/intermediate/_int_mta__models.yml`
-- *NEW:* `/Users/riley/Documents/GitHub/wgt-dbt/models/staging/adjust/_adjust__models.yml` (for v_stg models)
-
-**Generic Tests to Add:**
 ```yaml
-# Example: v_stg_adjust__installs.sql
-models:
-  - name: v_stg_adjust__installs
-    description: "Unified view of all app installs"
-    columns:
-      - name: DEVICE_ID
-        description: "IDFV (iOS) or GPS_ADID (Android)"
-        tests:
-          - not_null
-          - unique:
-              config:
-                where: "PLATFORM = 'Android'"  # Android has deterministic IDs
-      - name: PLATFORM
-        tests:
-          - not_null
-          - accepted_values:
-              values: ['iOS', 'Android']
-      - name: INSTALL_TIMESTAMP
-        tests:
-          - not_null
-          - dbt_utils.recency:
-              datepart: day
-              field: INSTALL_TIMESTAMP
-              interval: 7
+version: 2
+
+sources:
+  - name: adjust
+    description: Adjust mobile attribution data
+    database: ADJUST
+    schema: S3_DATA
+    config:
+      freshness:
+        warn_after: {count: 12, period: hour}
+        error_after: {count: 24, period: hour}
+    tables:
+      - name: IOS_ACTIVITY_INSTALL
+        description: iOS install events with attribution data
+        config:
+          loaded_at_field: CREATED_AT  # Table-level override
+          freshness:
+            warn_after: {count: 6, period: hour}
+            error_after: {count: 12, period: hour}
 ```
 
-**Integration:** Tests run via `dbt test` command, CI/CD integration
+**Configuration hierarchy:**
+1. **Source-level** `freshness` applies to all tables (default)
+2. **Table-level** `freshness` overrides source-level for specific tables
+3. **loaded_at_field** specifies which column tracks data recency
 
-### 7. Singular Tests (NEW - tests/ folder)
+### Integration with Existing Files
 
-**Pattern:** Custom SQL tests for complex business rules
+**Modify these existing files:**
 
-**Files to Create:**
+| File | Add Freshness For | loaded_at_field |
+|------|-------------------|-----------------|
+| `models/staging/adjust/_adjust__sources.yml` | All Adjust activity tables | CREATED_AT (epoch timestamp) |
+| `models/staging/amplitude/_amplitude__sources.yml` | Amplitude event tables | EVENT_TIME or SERVER_UPLOAD_TIME |
+| `models/staging/supermetrics/_supermetrics__sources.yml` | Supermetrics ad spend | DATE (calendar date, need proxy) |
+| `models/staging/revenue/_revenue__sources.yml` | Revenue events | EVENT_TIME |
+
+**Example for Adjust sources:**
+
+```yaml
+# models/staging/adjust/_adjust__sources.yml
+version: 2
+
+sources:
+  - name: adjust
+    description: Adjust mobile attribution data
+    database: ADJUST
+    schema: S3_DATA
+    config:
+      loaded_at_field: CREATED_AT  # Source-level default
+      freshness:
+        warn_after: {count: 12, period: hour}
+        error_after: {count: 24, period: hour}
+    tables:
+      - name: IOS_ACTIVITY_INSTALL
+        description: iOS install events with attribution data
+      - name: IOS_ACTIVITY_SESSION
+        description: iOS session events
+      # ... existing table definitions
 ```
-/Users/riley/Documents/GitHub/wgt-dbt/tests/
-├── staging/
-│   ├── test_device_id_format_consistency.sql
-│   └── test_ad_partner_mapping_complete.sql
-├── intermediate/
-│   ├── test_device_mapping_no_orphans.sql
-│   ├── test_user_journey_lookback_window.sql
-│   └── test_touchpoint_credit_sums_to_one.sql
-└── marts/
-    └── test_mta_revenue_reconciliation.sql
+
+**No schema changes required.** Freshness checks use existing timestamp columns.
+
+### dbt Cloud Execution
+
+**Validation without local dbt:**
+
+1. **dbt Cloud CI Job** — Add freshness check to CI workflow
+   - Command: `dbt source freshness`
+   - Runs before `dbt build` to validate data recency
+   - Does NOT fail job if freshness fails (use checkbox method)
+
+2. **Dedicated Freshness Job** — Separate scheduled job for monitoring
+   - Schedule: Every 1 hour (2x frequency of lowest 2-hour SLA)
+   - Command: `dbt source freshness`
+   - Store results for alerting
+   - Does NOT run model builds
+
+**dbt Cloud UI Configuration:**
+- Execution Settings → "Run source freshness" checkbox = runs as first step without breaking build
+- OR explicit command `dbt source freshness` = fails job if data stale
+
+**No local dbt required.** All freshness checks run in dbt Cloud scheduled jobs.
+
+### Data Flow Impact
+
+```
+Source Tables (Snowflake)
+  ↓
+[NEW] Freshness Check (dbt source freshness)
+  ↓ validates timestamps
+Staging Models (views)
+  ↓
+Intermediate Models (incremental)
+  ↓
+Marts (tables)
 ```
 
-**Example Singular Test:**
+**Freshness checks are read-only.** They query source tables to check `loaded_at_field` timestamp, but do not modify data or run models.
+
+### Component Boundaries
+
+| Component | Responsibility | Freshness Role |
+|-----------|----------------|----------------|
+| Source tables | Raw data from ETL pipelines | Monitored (not modified) |
+| Freshness configs | Define SLA thresholds | Lives in source YAML |
+| dbt Cloud job | Execute freshness checks | Scheduled independently |
+| Staging models | Transform source data | Unchanged (freshness is upstream) |
+
+**No new components.** Freshness monitoring is metadata-only addition to existing source definitions.
+
+## Feature 2: Singular Tests
+
+### Integration Architecture
+
+**Location:** New `.sql` files in `tests/` directory, organized by domain.
+
+**Directory structure:**
+
+```
+tests/
+  mmm/
+    assert_mmm_daily_grain_completeness.sql
+    assert_mmm_weekly_rollup_matches_daily.sql
+    assert_mmm_revenue_source_consistency.sql
+  mta/
+    assert_touchpoint_credit_sums_to_one.sql
+    assert_user_journey_lookback_coverage.sql
+  cross_layer/
+    assert_device_counts_staging_to_marts.sql
+```
+
+**dbt discovers all `.sql` files in `test-paths`** (default: `["tests"]`). Subdirectories are supported and recommended for organization.
+
+### Singular Test Structure
+
+**What they are:** SQL queries that return **failing rows**. Test passes if query returns zero rows.
+
+**Example — Touchpoint credit sums to 1.0:**
+
 ```sql
--- tests/intermediate/test_touchpoint_credit_sums_to_one.sql
--- Validates that all attribution model credits sum to 1.0 per install
+-- tests/mta/assert_touchpoint_credit_sums_to_one.sql
+/*
+    Test: Touchpoint credit for each install should sum to exactly 1.0
+    Grain: Per DEVICE_ID + PLATFORM + attribution model
+    Fails: If any install has credit sum != 1.0 (accounting for floating point)
+*/
 
-WITH credit_totals AS (
+WITH credit_sums AS (
     SELECT
         DEVICE_ID,
-        INSTALL_TIMESTAMP,
-        SUM(CREDIT_TIME_DECAY) AS total_time_decay,
-        SUM(CREDIT_LINEAR) AS total_linear,
-        SUM(CREDIT_POSITION_BASED) AS total_position_based
+        PLATFORM,
+        -- Add attribution model when available
+        SUM(CREDIT) AS TOTAL_CREDIT
     FROM {{ ref('int_mta__touchpoint_credit') }}
-    GROUP BY DEVICE_ID, INSTALL_TIMESTAMP
+    GROUP BY DEVICE_ID, PLATFORM
 )
 
-SELECT *
-FROM credit_totals
-WHERE
-    ABS(total_time_decay - 1.0) > 0.01
-    OR ABS(total_linear - 1.0) > 0.01
-    OR ABS(total_position_based - 1.0) > 0.01
+SELECT
+    DEVICE_ID,
+    PLATFORM,
+    TOTAL_CREDIT,
+    ABS(TOTAL_CREDIT - 1.0) AS DEVIATION
+FROM credit_sums
+WHERE ABS(TOTAL_CREDIT - 1.0) > 0.001  -- Tolerance for floating point
 ```
 
-**Integration:** Runs with `dbt test` alongside generic tests
+**Example — MMM daily grain completeness:**
 
-### 8. Unit Tests (NEW - model-level)
-
-**Pattern:** Define test cases with mock input data and expected output
-**Requires:** dbt Core 1.8+ (unit tests feature)
-
-**Integration Points:**
-```yaml
-# In models/staging/adjust/_adjust__models.yml
-unit_tests:
-  - name: test_android_device_id_uppercase
-    model: v_stg_adjust__installs
-    given:
-      - input: ref('source', 'adjust', 'ANDROID_ACTIVITY_INSTALL')
-        rows:
-          - GPS_ADID: "abc123-def456"
-            INSTALLED_AT: 1704067200
-            CREATED_AT: 1704067200
-    expect:
-      rows:
-        - DEVICE_ID: "ABC123-DEF456"
-          PLATFORM: "Android"
-```
-
-**When to Use:**
-- Critical transformations (device ID normalization, credit calculation)
-- Edge cases (null handling, date boundary conditions)
-- NOT for full pipeline integration (use data tests instead)
-
-### 9. Incremental Model Testing Strategy
-
-**Challenge:** Incremental models (int_mta__user_journey, int_adjust_amplitude__device_mapping) accumulate data over time
-**Risk:** Logic bugs compound, late-arriving data causes gaps
-
-**Testing Approach:**
-
-**A. Full Refresh Validation (Periodic)**
-```bash
-# In CI or scheduled job
-dbt run --full-refresh --select int_mta__user_journey
-dbt test --select int_mta__user_journey
-```
-
-**B. Lookback Window Testing**
 ```sql
--- tests/intermediate/test_user_journey_no_gaps.sql
--- Validates that all installs in lookback window have journey records
+-- tests/mmm/assert_mmm_daily_grain_completeness.sql
+/*
+    Test: MMM daily summary should have complete date spine with no gaps
+    Critical: Time series models require continuous data
+    Fails: If any date is missing between min and max date
+*/
 
-WITH recent_installs AS (
-    SELECT DEVICE_ID, INSTALL_TIMESTAMP
-    FROM {{ ref('v_stg_adjust__installs') }}
-    WHERE INSTALL_TIMESTAMP >= CURRENT_DATE - INTERVAL '10 days'
+WITH date_spine AS (
+    SELECT
+        DATEADD(day, SEQ4(), (SELECT MIN(DATE) FROM {{ ref('mmm__daily_channel_summary') }})) AS DATE
+    FROM TABLE(GENERATOR(ROWCOUNT => 1000))
+    QUALIFY DATE <= (SELECT MAX(DATE) FROM {{ ref('mmm__daily_channel_summary') }})
 ),
 
-journey_coverage AS (
-    SELECT DISTINCT DEVICE_ID, INSTALL_TIMESTAMP
-    FROM {{ ref('int_mta__user_journey') }}
-    WHERE INSTALL_TIMESTAMP >= CURRENT_DATE - INTERVAL '10 days'
+actual_dates AS (
+    SELECT DISTINCT DATE
+    FROM {{ ref('mmm__daily_channel_summary') }}
 )
 
-SELECT i.DEVICE_ID, i.INSTALL_TIMESTAMP
-FROM recent_installs i
-LEFT JOIN journey_coverage j
-    ON i.DEVICE_ID = j.DEVICE_ID
-    AND i.INSTALL_TIMESTAMP = j.INSTALL_TIMESTAMP
-WHERE j.DEVICE_ID IS NULL
+SELECT
+    date_spine.DATE AS MISSING_DATE
+FROM date_spine
+LEFT JOIN actual_dates
+    ON date_spine.DATE = actual_dates.DATE
+WHERE actual_dates.DATE IS NULL
 ```
 
-**C. Idempotency Checks**
-```yaml
-# Run model twice, compare results
-# Implemented via CI pipeline or dbt Cloud job
-# Use dbt-audit-helper package for comparison
-```
+**Example — Cross-layer device count consistency:**
 
-**Integration:** Run in CI/CD before merge, scheduled for production monitoring
-
-## Data Flow: Device Mapping Fix
-
-### Before Fix (Current State)
-
-```
-Amplitude EVENTS_726530
-    ├─ DEVICE_ID (Android: UUID, iOS: UUID)
-    └─ USER_ID
-         ↓
-v_stg_amplitude__merge_ids
-    └─ Strip 'R' suffix if Android (INCORRECT ASSUMPTION)
-         ↓
-int_adjust_amplitude__device_mapping
-    └─ ADJUST_DEVICE_ID (low match rate for Android)
-         ↓
-Revenue Attribution (BROKEN for Android)
-```
-
-### After Fix (Target State)
-
-```
-Amplitude EVENTS_726530
-    ├─ DEVICE_ID (format: TBD via investigation)
-    └─ USER_ID
-         ↓
-v_stg_amplitude__merge_ids
-    └─ CORRECT normalization based on verified format
-         ↓ [TESTED: not_null, format validation]
-int_adjust_amplitude__device_mapping
-    └─ ADJUST_DEVICE_ID (high match rate)
-         ↓ [TESTED: no orphans, referential integrity]
-Revenue Attribution (WORKING)
-```
-
-**Critical Path:**
-1. Investigate actual Amplitude DEVICE_ID format (Android and iOS)
-2. Investigate actual Adjust GPS_ADID format (verify UPPER() in installs model)
-3. Update v_stg_amplitude__merge_ids normalization logic
-4. Add tests to validate match rate improvement
-5. Monitor int_device_mapping__distribution_summary for quality changes
-
-## Data Flow: dbt Testing Integration
-
-### Generic Tests (YAML-based)
-
-```
-Model Definition (SQL)
-    ↓
-Model Config (YAML in same directory)
-    ├─ columns: [DEVICE_ID, PLATFORM, ...]
-    └─ tests: [not_null, unique, accepted_values]
-         ↓
-`dbt test` command
-    ├─ Generates SQL: SELECT * WHERE DEVICE_ID IS NULL
-    └─ Fails if query returns rows
-         ↓
-CI/CD Pipeline (blocks merge if tests fail)
-```
-
-### Singular Tests (SQL-based)
-
-```
-Custom Test SQL (tests/ folder)
-    └─ SELECT rows that violate business rule
-         ↓
-`dbt test` command
-    └─ Runs query, fails if rows returned
-         ↓
-CI/CD Pipeline
-```
-
-### Test Execution Flow
-
-```
-Developer commits code
-    ↓
-CI Pipeline Triggered
-    ├─ dbt deps (install packages)
-    ├─ dbt compile (validate Jinja/SQL)
-    ├─ dbt run --select state:modified+ (build changed models)
-    ├─ dbt test --select state:modified+ (run tests on changed models)
-    └─ PASS → Allow merge | FAIL → Block merge
-         ↓
-Production Deployment
-    ├─ dbt run (full pipeline or incremental)
-    ├─ dbt test (data quality validation)
-    └─ Alert if tests fail (data quality regression)
-```
-
-## Architectural Patterns
-
-### Pattern 1: Macro for Duplicate SQL
-
-**What:** Extract repeated CASE statements, date logic, or calculations into reusable macros
-**When to use:** Same SQL block appears in 2+ models
-**Trade-offs:**
-- PRO: DRY principle, single source of truth, easier maintenance
-- CON: Reduces SQL readability (Jinja abstraction), harder for non-engineers to debug
-
-**Example:**
 ```sql
--- macros/map_ad_partner.sql
+-- tests/cross_layer/assert_device_counts_staging_to_marts.sql
+/*
+    Test: Device counts should match from staging → intermediate → marts
+    Validates: No unexpected duplicates or drops in transformation pipeline
+    Fails: If counts differ by more than 1% (allows for edge case filtering)
+*/
+
+WITH staging_counts AS (
+    SELECT
+        DATE(INSTALL_TIMESTAMP) AS DATE,
+        PLATFORM,
+        COUNT(DISTINCT DEVICE_ID) AS STAGING_INSTALLS
+    FROM {{ ref('v_stg_adjust__installs') }}
+    WHERE INSTALL_TIMESTAMP >= DATEADD(day, -30, CURRENT_DATE)
+    GROUP BY 1, 2
+),
+
+intermediate_counts AS (
+    SELECT
+        DATE,
+        PLATFORM,
+        SUM(INSTALLS) AS INTERMEDIATE_INSTALLS
+    FROM {{ ref('int_mmm__daily_channel_installs') }}
+    WHERE DATE >= DATEADD(day, -30, CURRENT_DATE)
+    GROUP BY 1, 2
+),
+
+mart_counts AS (
+    SELECT
+        DATE,
+        PLATFORM,
+        SUM(INSTALLS) AS MART_INSTALLS
+    FROM {{ ref('mmm__daily_channel_summary') }}
+    WHERE DATE >= DATEADD(day, -30, CURRENT_DATE)
+    GROUP BY 1, 2
+)
+
+SELECT
+    s.DATE,
+    s.PLATFORM,
+    s.STAGING_INSTALLS,
+    i.INTERMEDIATE_INSTALLS,
+    m.MART_INSTALLS,
+    ABS(s.STAGING_INSTALLS - i.INTERMEDIATE_INSTALLS) AS STAGING_TO_INT_DIFF,
+    ABS(i.INTERMEDIATE_INSTALLS - m.MART_INSTALLS) AS INT_TO_MART_DIFF
+FROM staging_counts s
+FULL OUTER JOIN intermediate_counts i USING (DATE, PLATFORM)
+FULL OUTER JOIN mart_counts m USING (DATE, PLATFORM)
+WHERE
+    ABS(s.STAGING_INSTALLS - i.INTERMEDIATE_INSTALLS) / NULLIF(s.STAGING_INSTALLS, 0) > 0.01
+    OR ABS(i.INTERMEDIATE_INSTALLS - m.MART_INSTALLS) / NULLIF(i.INTERMEDIATE_INSTALLS, 0) > 0.01
+```
+
+### Integration with Existing Tests
+
+**Current generic tests** (in `_models.yml` files):
+- `not_null` — Column-level null checks
+- `unique` — Primary key uniqueness
+- `dbt_utils.unique_combination_of_columns` — Composite key uniqueness
+- `accepted_values` — Enum validation (e.g., PLATFORM in ['iOS', 'Android'])
+- `relationships` — Foreign key validation
+
+**New singular tests** complement generic tests:
+- **Generic tests:** Data shape and schema validation (structural)
+- **Singular tests:** Business logic and cross-model validation (semantic)
+
+**Test execution:**
+```bash
+dbt test                                    # Run all tests
+dbt test --select test_type:singular       # Only singular tests
+dbt test --select test_type:generic        # Only generic tests
+dbt test --select tests/mmm/*              # Only MMM singular tests
+```
+
+### Naming Convention
+
+**Pattern:** `assert_<what_is_being_tested>.sql`
+
+**Examples:**
+- `assert_touchpoint_credit_sums_to_one.sql`
+- `assert_mmm_weekly_rollup_matches_daily.sql`
+- `assert_revenue_source_consistency.sql`
+- `assert_device_counts_staging_to_marts.sql`
+
+**Benefits:**
+- Clear test purpose from filename
+- Easy to grep for failing test in logs
+- Autocomplete-friendly in IDE
+
+### dbt Cloud CI Integration
+
+**Validation without local dbt:**
+
+1. **CI Job includes tests automatically**
+   - Default command: `dbt build --select state:modified+`
+   - `dbt build` runs models AND tests in DAG order
+   - Singular tests run after their referenced models
+
+2. **Slim CI for modified tests**
+   - Only tests referencing modified models run
+   - Speeds up PR validation
+   - Uses production as comparison state
+
+3. **Test failure behavior**
+   - Test failure = job failure
+   - PR cannot merge until tests pass
+   - Logs show failing rows for debugging
+
+**No local dbt required.** CI jobs validate singular tests in dbt Cloud on every PR.
+
+### Data Flow Impact
+
+```
+Staging Models
+  ↓
+Intermediate Models
+  ↓
+Marts
+  ↓
+[NEW] Singular Tests (query marts to validate business rules)
+```
+
+**Tests are read-only.** They query existing models but do not modify data or create new tables.
+
+### Component Boundaries
+
+| Component | Responsibility | Test Interaction |
+|-----------|----------------|------------------|
+| Staging models | Source normalization | Tested by generic tests |
+| Intermediate models | Business logic | Tested by singular + generic tests |
+| Marts | Aggregated metrics | Tested by singular tests (cross-layer validation) |
+| Singular tests | Validate business rules | Query multiple models to assert correctness |
+
+**Tests are separate from models** in DAG — they depend on models but models do not depend on tests.
+
+## Feature 3: AD_PARTNER Macro Extraction
+
+### Integration Architecture
+
+**Location:** New file `macros/map_ad_partner.sql` in existing `macros/` directory.
+
+**Current duplication:**
+- `v_stg_adjust__installs.sql` lines 65-83
+- `v_stg_adjust__touchpoints.sql` lines 140-158
+
+**After extraction:**
+- Macro defines logic once
+- Both models call `{{ map_ad_partner('NETWORK_NAME') }}`
+
+### Macro Structure
+
+**File:** `macros/map_ad_partner.sql`
+
+```sql
 {% macro map_ad_partner(network_name_column) %}
     CASE
-        WHEN {{ network_name_column }} IN ('Facebook Installs', ...) THEN 'Meta'
-        WHEN {{ network_name_column }} IN ('Google Ads ACE', ...) THEN 'Google'
+        WHEN {{ network_name_column }} IN ('Facebook Installs', 'Instagram Installs', 'Off-Facebook Installs', 'Facebook Messenger Installs') THEN 'Meta'
+        WHEN {{ network_name_column }} IN ('Google Ads ACE', 'Google Ads ACI', 'Google Organic Search', 'google') THEN 'Google'
+        WHEN {{ network_name_column }} IN ('TikTok SAN', 'TikTok_Paid_Ads_iOS', 'Tiktok Installs') THEN 'TikTok'
+        WHEN {{ network_name_column }} = 'Apple Search Ads' THEN 'Apple'
+        WHEN {{ network_name_column }} LIKE 'AppLovin%' THEN 'AppLovin'
+        WHEN {{ network_name_column }} LIKE 'UnityAds%' THEN 'Unity'
+        WHEN {{ network_name_column }} LIKE 'Moloco%' THEN 'Moloco'
+        WHEN {{ network_name_column }} LIKE 'Smadex%' THEN 'Smadex'
+        WHEN {{ network_name_column }} LIKE 'AdAction%' THEN 'AdAction'
+        WHEN {{ network_name_column }} LIKE 'Vungle%' THEN 'Vungle'
+        WHEN {{ network_name_column }} = 'Organic' THEN 'Organic'
+        WHEN {{ network_name_column }} = 'Unattributed' THEN 'Unattributed'
+        WHEN {{ network_name_column }} = 'Untrusted Devices' THEN 'Untrusted'
+        WHEN {{ network_name_column }} IN ('wgtgolf', 'WGT_Events_SocialPosts_iOS', 'WGT_GiftCards_Social') THEN 'WGT'
+        WHEN {{ network_name_column }} LIKE 'Phigolf%' THEN 'Phigolf'
+        WHEN {{ network_name_column }} LIKE 'Ryder%' THEN 'Ryder Cup'
         ELSE 'Other'
     END
 {% endmacro %}
+```
 
--- models/staging/adjust/v_stg_adjust__installs.sql
+**Usage in models:**
+
+```sql
+-- v_stg_adjust__installs.sql (AFTER refactor)
 SELECT
     DEVICE_ID,
+    PLATFORM,
     NETWORK_NAME,
-    {{ map_ad_partner('NETWORK_NAME') }} AS AD_PARTNER  -- Instead of 18-line CASE
-FROM source_table
+    {{ map_ad_partner('NETWORK_NAME') }} AS AD_PARTNER,  -- Replaces 18-line CASE
+    CAMPAIGN_NAME,
+    -- ... rest of columns
+FROM DEDUPED
 ```
 
-**Sources:**
-- [Jinja and macros | dbt Developer Hub](https://docs.getdbt.com/docs/build/jinja-macros)
-- [dbt macros: What they are and why you should use them | Metaplane](https://www.metaplane.dev/blog/dbt-macros)
+```sql
+-- v_stg_adjust__touchpoints.sql (AFTER refactor)
+SELECT
+    DEVICE_ID,
+    PLATFORM,
+    NETWORK_NAME,
+    {{ map_ad_partner('NETWORK_NAME') }} AS AD_PARTNER,  -- Replaces 18-line CASE
+    CAMPAIGN_NAME,
+    -- ... rest of columns
+FROM all_touchpoints
+```
 
-### Pattern 2: Co-located Testing (YAML + Models)
+### Macro Organization
 
-**What:** Keep test definitions in same subdirectory as models they test
-**When to use:** Always (dbt best practice for organization)
-**Trade-offs:**
-- PRO: Test discovery, easier navigation, logical grouping
-- CON: None (this is standard)
+**Current macros directory:**
+
+```
+macros/
+  generate_schema_name.sql   ← Environment routing (dev vs prod schemas)
+  get_source_schema.sql      ← Source schema helper
+  setup_dev_views.sql        ← Development setup helper
+```
+
+**After adding AD_PARTNER macro:**
+
+```
+macros/
+  generate_schema_name.sql
+  get_source_schema.sql
+  setup_dev_views.sql
+  map_ad_partner.sql         ← NEW: AD_PARTNER mapping logic
+```
+
+**Subdirectory option** (if more macros added later):
+
+```
+macros/
+  schema/
+    generate_schema_name.sql
+    get_source_schema.sql
+  helpers/
+    setup_dev_views.sql
+    map_ad_partner.sql
+```
+
+**dbt discovers macros automatically** — all `.sql` files in `macro-paths` (default: `["macros"]`) are loaded, including subdirectories.
+
+### Integration with Existing Models
+
+**Models affected:**
+
+| Model | Current Lines | After Macro | Change |
+|-------|---------------|-------------|--------|
+| `v_stg_adjust__installs.sql` | 96 lines | 78 lines | -18 lines |
+| `v_stg_adjust__touchpoints.sql` | 168 lines | 150 lines | -18 lines |
+
+**Downstream impact:**
+
+| Layer | Model | AD_PARTNER Usage | Impact |
+|-------|-------|------------------|--------|
+| Staging | `v_stg_adjust__installs` | Outputs AD_PARTNER column | Modified (uses macro) |
+| Staging | `v_stg_adjust__touchpoints` | Outputs AD_PARTNER column | Modified (uses macro) |
+| Intermediate | `int_mmm__daily_channel_installs` | Reads AD_PARTNER from staging | **No change** |
+| Intermediate | `int_mmm__daily_channel_spend` | Uses network_mapping seed | **No change** |
+| Intermediate | `int_mmm__daily_channel_revenue` | Uses network_mapping seed | **No change** |
+| Marts | `mmm__daily_channel_summary` | Aggregates by CHANNEL | **No change** |
+
+**Critical: Macro refactor is transparent to downstream models.** The `AD_PARTNER` column still exists with identical values — only the SQL generation mechanism changes.
+
+### Consistency Validation
+
+**Pre-deployment test** (singular test for Phase 4):
+
+```sql
+-- tests/staging/assert_ad_partner_macro_consistency.sql
+/*
+    Test: Verify macro produces identical AD_PARTNER as original CASE statement
+    Purpose: Validate refactor before removing old CASE logic
+    Fails: If any NETWORK_NAME produces different AD_PARTNER after macro extraction
+*/
+
+WITH macro_mapping AS (
+    SELECT DISTINCT
+        NETWORK_NAME,
+        {{ map_ad_partner('NETWORK_NAME') }} AS MACRO_AD_PARTNER
+    FROM {{ ref('v_stg_adjust__installs') }}
+),
+
+-- This CTE would need to query a backup of the old logic or use compiled SQL comparison
+-- Example assumes old CASE logic temporarily preserved as OLD_AD_PARTNER column for validation
+original_mapping AS (
+    SELECT DISTINCT
+        NETWORK_NAME,
+        AD_PARTNER AS ORIGINAL_AD_PARTNER
+    FROM {{ ref('v_stg_adjust__installs') }}
+)
+
+SELECT
+    o.NETWORK_NAME,
+    o.ORIGINAL_AD_PARTNER,
+    m.MACRO_AD_PARTNER
+FROM original_mapping o
+FULL OUTER JOIN macro_mapping m USING (NETWORK_NAME)
+WHERE o.ORIGINAL_AD_PARTNER != m.MACRO_AD_PARTNER
+   OR (o.ORIGINAL_AD_PARTNER IS NULL AND m.MACRO_AD_PARTNER IS NOT NULL)
+   OR (o.ORIGINAL_AD_PARTNER IS NOT NULL AND m.MACRO_AD_PARTNER IS NULL)
+```
+
+**Post-deployment validation:**
+
+```bash
+# In dbt Cloud job or local dbt
+dbt run --select v_stg_adjust__installs v_stg_adjust__touchpoints
+dbt test --select v_stg_adjust__installs v_stg_adjust__touchpoints
+
+# Verify downstream models compile without errors
+dbt compile --select int_mmm__daily_channel_installs+
+```
+
+### dbt Cloud Validation
+
+**No local dbt required:**
+
+1. **CI Job validates macro refactor**
+   - `dbt build --select state:modified+`
+   - Compiles staging models with macro
+   - Runs tests on refactored models
+   - Builds downstream models to verify no breakage
+
+2. **Compiled SQL inspection** (dbt Cloud UI)
+   - Navigate to compiled SQL for staging models
+   - Verify macro expands to full CASE statement
+   - Compare compiled SQL before/after refactor
+
+**Macro changes trigger full model recompilation** — dbt Cloud detects macro modifications and recompiles all models that reference the macro.
+
+### Data Flow Impact
+
+```
+[BEFORE]
+v_stg_adjust__installs.sql (CASE statement lines 65-83)
+v_stg_adjust__touchpoints.sql (CASE statement lines 140-158)
+  ↓
+int_mmm__daily_channel_installs.sql (reads AD_PARTNER)
+  ↓
+mmm__daily_channel_summary.sql (aggregates by CHANNEL)
+
+[AFTER]
+macros/map_ad_partner.sql (CASE logic defined once)
+  ↓ (compiled into)
+v_stg_adjust__installs.sql (calls {{ map_ad_partner('NETWORK_NAME') }})
+v_stg_adjust__touchpoints.sql (calls {{ map_ad_partner('NETWORK_NAME') }})
+  ↓
+int_mmm__daily_channel_installs.sql (reads AD_PARTNER — unchanged)
+  ↓
+mmm__daily_channel_summary.sql (aggregates by CHANNEL — unchanged)
+```
+
+**Compiled SQL is identical.** Macro is a code organization change, not a logic change.
+
+### Component Boundaries
+
+| Component | Responsibility | Before Refactor | After Refactor |
+|-----------|----------------|-----------------|----------------|
+| `map_ad_partner` macro | Define NETWORK_NAME → AD_PARTNER mapping | N/A (doesn't exist) | **NEW:** Single source of truth |
+| `v_stg_adjust__installs` | Normalize install events | Contains CASE logic | Calls macro |
+| `v_stg_adjust__touchpoints` | Normalize touchpoint events | Contains CASE logic | Calls macro |
+| Downstream models | Business logic and aggregation | Read AD_PARTNER column | Read AD_PARTNER column (no change) |
+
+**Macro is compile-time only** — it does not create runtime components or tables. It generates SQL that is embedded into model definitions.
+
+## Architectural Patterns to Follow
+
+### Pattern 1: Freshness Configs Co-Located with Source Definitions
+
+**What:** Source freshness configurations live in the same YAML file as source table definitions.
+
+**Why:**
+- Single file contains all source metadata (schema, tables, freshness)
+- Easy to update freshness SLAs when source changes
+- No separate "monitoring config" files to maintain
 
 **Example:**
-```
-models/staging/adjust/
-├── _adjust__sources.yml          # Source freshness tests
-├── _adjust__models.yml            # Model tests for v_stg_* models
-├── v_stg_adjust__installs.sql
-└── v_stg_adjust__touchpoints.sql
-```
 
-**Sources:**
-- [How we structure our dbt projects | dbt Developer Hub](https://docs.getdbt.com/best-practices/how-we-structure/1-guide-overview)
-- [Organising a dbt Project: Best Practices - The Data School](https://www.thedataschool.co.uk/curtis-paterson/organising-a-dbt-project-best-practices/)
-
-### Pattern 3: Test Pyramid for Analytics
-
-**What:** Layer tests by scope (unit → generic → singular → integration)
-**When to use:** Comprehensive data quality strategy
-**Trade-offs:**
-- PRO: Catches bugs at appropriate level (fast unit tests, thorough integration tests)
-- CON: Overhead of maintaining multiple test types
-
-**Pyramid Structure:**
-```
-        ┌─────────────────┐
-        │  Integration    │  ← Singular tests: end-to-end business rules
-        │  Tests (Few)    │     (revenue reconciliation, attribution sums)
-        ├─────────────────┤
-        │  Data Tests     │  ← Generic tests: column-level constraints
-        │  (Many)         │     (not_null, unique, accepted_values)
-        ├─────────────────┤
-        │  Unit Tests     │  ← Model-level: mock data, expected output
-        │  (Moderate)     │     (device ID normalization, credit calculation)
-        └─────────────────┘
+```yaml
+# models/staging/adjust/_adjust__sources.yml
+sources:
+  - name: adjust
+    config:
+      freshness:
+        warn_after: {count: 12, period: hour}
 ```
 
-**Recommendation for WGT:**
-- **Unit Tests:** 5-10 critical transformations (device mapping, credit attribution)
-- **Generic Tests:** 50+ (all primary keys, critical columns)
-- **Singular Tests:** 10-15 complex business rules (lookback windows, credit sums)
+**Anti-pattern:** Creating separate `monitoring.yml` or `freshness.yml` files disconnected from source definitions.
 
-**Sources:**
-- [Unit Test vs an Integration Test for dbt | Datafold](https://www.datafold.com/blog/unit-test-vs-an-integration-test-for-dbt)
-- [7 dbt Testing Best Practices | Datafold](https://www.datafold.com/blog/7-dbt-testing-best-practices)
+### Pattern 2: Singular Tests Organized by Domain
 
-### Pattern 4: Incremental Model Testing Strategy
+**What:** Group singular tests into subdirectories matching model layer or business domain.
 
-**What:** Full refresh validation + lookback window tests for incremental models
-**When to use:** All incremental models (int_mta__user_journey, device_mapping, touchpoints)
-**Trade-offs:**
-- PRO: Prevents logic bugs from compounding over time
-- CON: Full refresh is expensive (run weekly/monthly, not in CI)
+**Why:**
+- Clear ownership and discoverability
+- Easy to run domain-specific tests (`dbt test --select tests/mmm/*`)
+- Mirrors model directory structure
 
-**Testing Approach:**
+**Example:**
+
+```
+tests/
+  mmm/           ← Tests for MMM pipeline
+  mta/           ← Tests for MTA pipeline
+  cross_layer/   ← Tests spanning multiple layers
+  staging/       ← Tests for staging layer edge cases
+```
+
+**Anti-pattern:** All singular tests in flat `tests/` directory with no organization.
+
+### Pattern 3: Macros for Repeated Business Logic
+
+**What:** Extract CASE statements, complex transformations, or repeated SQL patterns into macros.
+
+**When:**
+- Logic appears in 2+ models
+- Logic is >10 lines
+- Logic represents business rules (not boilerplate)
+
+**Example:** `map_ad_partner()` macro for NETWORK_NAME → AD_PARTNER mapping.
+
+**Anti-pattern:** Creating macros for simple column aliases or one-off transformations (over-abstraction).
+
+### Pattern 4: Incremental Models with Lookback Windows
+
+**What:** Incremental models use lookback windows to handle late-arriving data.
+
+**Why:**
+- Source data may arrive out of order
+- Ensures recent data is reprocessed on each run
+- Prevents data gaps from late data
+
+**Example:**
+
 ```sql
--- 1. Generic Test: Recency (data is fresh)
-- dbt_utils.recency:
-    datepart: day
-    field: INSTALL_TIMESTAMP
-    interval: 7
-
--- 2. Singular Test: No gaps in incremental window
-SELECT * FROM installs
-WHERE INSTALL_TIMESTAMP >= CURRENT_DATE - 10
-  AND NOT EXISTS (SELECT 1 FROM journey WHERE ...)
-
--- 3. CI Test: Run with --full-refresh on feature branch
-dbt run --full-refresh --select int_mta__user_journey
-
--- 4. Production Monitor: Compare incremental vs full refresh (monthly)
+{% if is_incremental() %}
+  AND DATE >= DATEADD(day, -7, (SELECT MAX(DATE) FROM {{ this }}))
+{% endif %}
 ```
 
-**Sources:**
-- [Testing incremental models - dbt Community Forum](https://discourse.getdbt.com/t/testing-incremental-models/1528)
-- [dbt Incremental part 2: Implementing & Testing – Joon](https://joonsolutions.com/dbt-incremental-implementing-testing/)
+**Trade-off:** 7-day lookback means reprocessing 7 days of data on each run, but guarantees data completeness.
 
-## Integration Points
+### Pattern 5: Test Scope Limited to Recent Data
 
-### External Data Sources
+**What:** Singular tests include `WHERE` clauses to limit scope to recent data (e.g., last 30 days).
 
-| Source | Integration Pattern | Notes |
-|--------|---------------------|-------|
-| Adjust S3 Data | dbt source() → Snowflake external table | Activity tables (install, click, impression) partitioned by platform |
-| Amplitude Events | dbt source() → Snowflake table | Events table (726530) with DEVICE_ID, USER_ID |
-| Network Mapping CSV | dbt seed → Snowflake table | Static partner name mappings, version controlled |
-| Adjust API Data | dbt source() → Snowflake table | Aggregated daily reports (not used in MTA, used for spend) |
+**Why:**
+- Prevents historical data issues from blocking current development
+- Faster test execution
+- Focuses validation on actively changing data
 
-### Internal Model Dependencies
+**Example:**
 
-| Upstream | Downstream | Communication | Data Contract |
-|----------|------------|---------------|---------------|
-| v_stg_adjust__installs | int_mta__user_journey | ref() in SQL | DEVICE_ID (not_null), PLATFORM (iOS/Android), INSTALL_TIMESTAMP |
-| v_stg_adjust__touchpoints | int_mta__user_journey | ref() in SQL | DEVICE_ID or IDFA (iOS), TOUCHPOINT_TIMESTAMP within 7-day window |
-| v_stg_amplitude__merge_ids | int_adjust_amplitude__device_mapping | ref() in SQL | DEVICE_ID_UUID (normalized), AMPLITUDE_USER_ID (not_null) |
-| int_mta__user_journey | int_mta__touchpoint_credit | ref() in SQL | JOURNEY_ROW_KEY (unique), TOUCHPOINT_POSITION, BASE_TYPE_WEIGHT |
-| int_mta__touchpoint_credit | mart_network_performance_mta | ref() in SQL | CREDIT_TIME_DECAY (sums to 1.0 per install) |
-
-**Data Contract Validation:**
-- All contracts enforced via generic tests (not_null, unique, accepted_values)
-- Breaking changes to upstream models caught in CI via `dbt test --select state:modified+`
-
-### Schema Routing (generate_schema_name macro)
-
-| Model Schema Config | Dev Environment | Prod Environment | Purpose |
-|---------------------|-----------------|------------------|---------|
-| `schema: 'S3_DATA'` | DEV_S3_DATA | S3_DATA | Adjust activity models (raw source references) |
-| No schema config | DBT_WGTDATA | PROD | All staging, intermediate, marts |
-
-**Integration:** Automatic schema routing based on target.name in profiles.yml
-
-## Build Order (Dependency Graph)
-
-### Phase 1: Macro Refactoring (No Dependencies)
-
-**Build Order:**
-1. Create `/Users/riley/Documents/GitHub/wgt-dbt/macros/map_ad_partner.sql`
-2. Modify `v_stg_adjust__installs.sql` (replace CASE with macro call)
-3. Modify `v_stg_adjust__touchpoints.sql` (replace CASE with macro call)
-4. Test: `dbt run --select v_stg_adjust__installs v_stg_adjust__touchpoints`
-5. Validate: AD_PARTNER values unchanged (compare before/after)
-
-**Critical Path:** Macro must be created BEFORE models are modified
-
-### Phase 2: Device Mapping Investigation (Dependency: None)
-
-**Build Order:**
-1. Query Amplitude EVENTS_726530 table → examine DEVICE_ID format for Android
-2. Query Adjust ANDROID_ACTIVITY_INSTALL → examine GPS_ADID format
-3. Document findings in `v_stg_amplitude__merge_ids.sql` header comments
-4. Design normalization logic based on verified formats
-5. Update `v_stg_amplitude__merge_ids.sql` DEVICE_ID_UUID calculation
-6. Test: `dbt run --select v_stg_amplitude__merge_ids int_adjust_amplitude__device_mapping`
-7. Validate: Check `int_device_mapping__distribution_summary` for match rate improvement
-
-**Critical Path:** Investigation BEFORE code changes
-
-### Phase 3: Generic Testing (Dependency: Models exist)
-
-**Build Order:**
-1. Create `/Users/riley/Documents/GitHub/wgt-dbt/models/staging/adjust/_adjust__models.yml`
-2. Add tests for v_stg_adjust__installs (not_null, unique on Android DEVICE_ID)
-3. Add tests for v_stg_adjust__touchpoints (not_null on identifiers)
-4. Add tests to existing `models/staging/amplitude/_amplitude__sources.yml`
-5. Add tests to existing `models/intermediate/_int_mta__models.yml`
-6. Test: `dbt test --select v_stg_adjust__installs v_stg_adjust__touchpoints`
-
-**Critical Path:** Models must run successfully BEFORE tests added
-
-### Phase 4: Singular Testing (Dependency: Generic tests passing)
-
-**Build Order:**
-1. Create `/Users/riley/Documents/GitHub/wgt-dbt/tests/staging/test_device_id_format_consistency.sql`
-2. Create `/Users/riley/Documents/GitHub/wgt-dbt/tests/intermediate/test_touchpoint_credit_sums_to_one.sql`
-3. Create `/Users/riley/Documents/GitHub/wgt-dbt/tests/intermediate/test_user_journey_lookback_window.sql`
-4. Test: `dbt test --select test_type:singular`
-
-**Critical Path:** Generic tests validate data shape, singular tests validate business rules
-
-### Phase 5: CI/CD Integration (Dependency: All tests written)
-
-**Build Order:**
-1. Add `dbt test` to CI pipeline (after `dbt run`)
-2. Configure to run on pull requests
-3. Block merge if tests fail
-4. Add production monitoring for test failures
-
-**Critical Path:** Tests must be comprehensive BEFORE enforcing in CI
-
-## Recommended Project Structure (After Changes)
-
-```
-/Users/riley/Documents/GitHub/wgt-dbt/
-├── models/
-│   ├── staging/
-│   │   ├── adjust/
-│   │   │   ├── _adjust__sources.yml          (source freshness tests)
-│   │   │   ├── _adjust__models.yml           (NEW: generic tests for v_stg models)
-│   │   │   ├── v_stg_adjust__installs.sql    (MODIFIED: use map_ad_partner macro)
-│   │   │   └── v_stg_adjust__touchpoints.sql (MODIFIED: use map_ad_partner macro)
-│   │   ├── amplitude/
-│   │   │   ├── _amplitude__sources.yml       (add tests for DEVICE_ID)
-│   │   │   └── v_stg_amplitude__merge_ids.sql(MODIFIED: fix Android normalization)
-│   ├── intermediate/
-│   │   ├── _int_mta__models.yml              (add tests for journey, credit)
-│   │   ├── int_adjust_amplitude__device_mapping.sql (validate, possibly modify)
-│   │   ├── int_device_mapping__diagnostics.sql (no changes)
-│   │   ├── int_mta__user_journey.sql         (no changes)
-│   │   └── int_mta__touchpoint_credit.sql    (no changes)
-│   ├── marts/
-│   │   └── attribution/
-│   │       ├── _mta__models.yml              (add tests for marts)
-│   │       └── mart_network_performance_mta.sql (no changes)
-├── macros/
-│   ├── generate_schema_name.sql              (no changes)
-│   └── map_ad_partner.sql                    (NEW: centralized partner mapping)
-├── tests/                                     (NEW: singular tests folder)
-│   ├── staging/
-│   │   ├── test_device_id_format_consistency.sql
-│   │   └── test_ad_partner_mapping_complete.sql
-│   ├── intermediate/
-│   │   ├── test_device_mapping_no_orphans.sql
-│   │   ├── test_user_journey_lookback_window.sql
-│   │   └── test_touchpoint_credit_sums_to_one.sql
-├── seeds/
-│   └── network_mapping.csv                   (no changes)
-├── dbt_project.yml                           (possibly add test-paths config)
-└── .github/workflows/                        (NEW: CI/CD integration)
-    └── ci.yml                                 (run dbt test in CI)
+```sql
+WHERE DATE >= DATEADD(day, -30, CURRENT_DATE)
 ```
 
-### Structure Rationale
-
-- **macros/**: Reusable SQL logic extracted from models (DRY principle)
-- **tests/**: Organized by layer (staging, intermediate, marts) matching model structure
-- **YAML files**: Co-located with models in same directory for discoverability
-- **Diagnostic models**: Remain in intermediate/ layer (they ARE intermediate models, just for monitoring)
+**Anti-pattern:** Testing entire dataset history, causing tests to fail on unchangeable historical data.
 
 ## Anti-Patterns to Avoid
 
-### Anti-Pattern 1: Testing in Production Only
+### Anti-Pattern 1: Source Freshness on Non-Timestamp Columns
 
-**What people do:** Only run `dbt test` in production after deployment
-**Why it's wrong:** Data quality regressions reach users before being caught
-**Do this instead:** Run `dbt test` in CI/CD pipeline, block merge if tests fail
+**What goes wrong:** Configuring `loaded_at_field` to point to a business date column instead of ETL timestamp.
 
-**Prevention:**
-```yaml
-# .github/workflows/ci.yml
-- name: Run dbt tests
-  run: dbt test --select state:modified+
-  # Fails CI if tests fail → blocks merge
-```
+**Why bad:** Business dates (e.g., `DATE` in aggregated tables) don't reflect data freshness — data could be days old with a current business date.
 
-### Anti-Pattern 2: Overusing Macros
-
-**What people do:** Extract every repeated SQL pattern into macros for "DRY"
-**Why it's wrong:** Reduces readability, creates abstraction layers that confuse non-engineers
-**Do this instead:** Only extract to macro if repeated 2+ times AND logic is complex
-
-**Example of Overuse:**
-```sql
--- DON'T: This is too simple to abstract
-{% macro upper_device_id(col) %}
-    UPPER({{ col }})
-{% endmacro %}
-
--- DO: Just write UPPER() inline
-SELECT UPPER(DEVICE_ID) AS DEVICE_ID
-```
-
-**Sources:**
-- [Jinja and macros | dbt Developer Hub](https://docs.getdbt.com/docs/build/jinja-macros)
-
-### Anti-Pattern 3: Testing Everything with Generic Tests
-
-**What people do:** Only use not_null, unique, accepted_values for all validation
-**Why it's wrong:** Business rules (credit sums to 1.0, lookback windows) can't be expressed as column-level constraints
-**Do this instead:** Use test pyramid (generic for columns, singular for business rules, unit for transformations)
+**Prevention:** Use ETL timestamps (CREATED_AT, LOAD_TIMESTAMP, SERVER_UPLOAD_TIME) for freshness checks, not business dates.
 
 **Example:**
+
 ```yaml
-# DON'T: Can't validate "credits sum to 1.0" with generic test
-columns:
-  - name: CREDIT_TIME_DECAY
-    tests:
-      - not_null  # This only checks nulls, not summation logic
+# BAD
+loaded_at_field: DATE  # Business date, not ETL timestamp
 
-# DO: Write singular test
--- tests/intermediate/test_touchpoint_credit_sums_to_one.sql
+# GOOD
+loaded_at_field: CREATED_AT  # Actual data arrival timestamp
+```
+
+### Anti-Pattern 2: Singular Tests Without Failure Context
+
+**What goes wrong:** Test queries return only IDs without showing *why* the test failed.
+
+**Why bad:** Debugging requires re-running test with additional columns to understand failure.
+
+**Prevention:** Include relevant context columns in test output (not just failing keys).
+
+**Example:**
+
+```sql
+-- BAD: Only shows which installs failed
 SELECT DEVICE_ID
-FROM {{ ref('int_mta__touchpoint_credit') }}
-GROUP BY DEVICE_ID, INSTALL_TIMESTAMP
-HAVING ABS(SUM(CREDIT_TIME_DECAY) - 1.0) > 0.01
+FROM credit_sums
+WHERE ABS(TOTAL_CREDIT - 1.0) > 0.001
+
+-- GOOD: Shows *why* they failed
+SELECT
+    DEVICE_ID,
+    PLATFORM,
+    TOTAL_CREDIT,
+    ABS(TOTAL_CREDIT - 1.0) AS DEVIATION  -- Shows magnitude of failure
+FROM credit_sums
+WHERE ABS(TOTAL_CREDIT - 1.0) > 0.001
 ```
 
-**Sources:**
-- [dbt Tests Explained: Generic vs Singular | Medium](https://medium.com/@likkilaxminarayana/dbt-tests-explained-generic-vs-singular-with-real-examples-6c08d8dd78a7)
+### Anti-Pattern 3: Macros with Hardcoded Values
 
-### Anti-Pattern 4: Seeds for Dynamic Data
+**What goes wrong:** Macros contain hardcoded database names, schemas, or magic numbers instead of parameters or variables.
 
-**What people do:** Use seeds for data that changes frequently (daily partner mappings, config that updates weekly)
-**Why it's wrong:** Seeds require manual CSV updates and `dbt seed` runs, breaks automation
-**Do this instead:** Seeds for static reference data only (network_mapping.csv is appropriate because partner names rarely change)
+**Why bad:** Macros become environment-specific and break in dev/prod/CI.
 
-**Current Use Case (CORRECT):**
-```csv
-# seeds/network_mapping.csv
-# Changes: ~2-3 times/year when new partner added
-adjust_network_name,supermetrics_partner_id,ad_partner
-Facebook Installs,34,Meta
-AppLovin_iOS_2019,7,AppLovin
+**Prevention:** Use `target` context variables and macro parameters.
+
+**Example:**
+
+```sql
+-- BAD: Hardcoded schema
+{% macro get_installs() %}
+    SELECT * FROM PROD.S3_DATA.IOS_ACTIVITY_INSTALL
+{% endmacro %}
+
+-- GOOD: Uses source() function
+{% macro get_installs() %}
+    SELECT * FROM {{ source('adjust', 'IOS_ACTIVITY_INSTALL') }}
+{% endmacro %}
 ```
 
-**Anti-Pattern Example:**
-```csv
-# seeds/daily_exchange_rates.csv ← WRONG, changes daily
-date,currency,rate
-2026-02-10,EUR,0.85
-# This should be ETL pipeline or external table, not seed
+### Anti-Pattern 4: Over-Abstracting with Macros
+
+**What goes wrong:** Creating macros for simple operations that are clearer as inline SQL.
+
+**Why bad:** Reduces readability — readers must jump to macro definition to understand logic.
+
+**Prevention:** Only create macros for logic repeated 2+ times or complex transformations (>10 lines).
+
+**Example:**
+
+```sql
+-- BAD: Macro for simple column alias
+{% macro platform_name(col) %}
+    CASE WHEN {{ col }} = 'i' THEN 'iOS' ELSE 'Android' END
+{% endmacro %}
+
+-- GOOD: Inline for one-off simple transformation
+CASE WHEN platform_code = 'i' THEN 'iOS' ELSE 'Android' END AS PLATFORM
 ```
 
-**Sources:**
-- [Working with dbt Seeds: Critical Best Practices | Dagster](https://dagster.io/guides/working-with-dbt-seeds-quick-tutorial-critical-best-practices)
-- [Can I use seeds to load raw data? | dbt Developer Hub](https://docs.getdbt.com/faqs/Seeds/load-raw-data-with-seed)
+### Anti-Pattern 5: Freshness Without Alerting
 
-### Anti-Pattern 5: Ignoring Incremental Model Testing
+**What goes wrong:** Configuring source freshness but not setting up alerting or scheduled jobs.
 
-**What people do:** Write incremental model, never test with --full-refresh
-**Why it's wrong:** Logic bugs compound over time, late-arriving data creates gaps
-**Do this instead:** Periodic full refresh validation, lookback window tests
+**Why bad:** Freshness checks only help if someone monitors them — silent failures are useless.
 
 **Prevention:**
-```bash
-# Weekly job: Full refresh validation
-dbt run --full-refresh --select int_mta__user_journey
-# Compare row counts, aggregates to incremental version
-# Alert if discrepancies > threshold
+- Schedule dedicated freshness job in dbt Cloud
+- Set up alerts (email, Slack, PagerDuty)
+- Document escalation path for stale data
+
+**Example:**
+
+```yaml
+# Config exists but no job runs it = useless
+freshness:
+  warn_after: {count: 12, period: hour}
+
+# Must also:
+# 1. Create dbt Cloud job scheduled every 6 hours
+# 2. Add dbt source freshness to job commands
+# 3. Configure job notifications to team Slack channel
 ```
 
-**Sources:**
-- [Testing incremental models - dbt Community Forum](https://discourse.getdbt.com/t/testing-incremental-models/1528)
+## Build Order Recommendation
+
+Based on architectural dependencies and risk management:
+
+### Phase 4: DRY Refactor (AD_PARTNER Macro)
+
+**Build order:**
+
+1. **Create macro file** — `macros/map_ad_partner.sql`
+   - Define CASE logic once
+   - Add macro documentation (Jinja comments)
+
+2. **Create consistency test** — `tests/staging/assert_ad_partner_macro_consistency.sql`
+   - Validate macro produces identical output to original CASE
+   - Run test against production data
+
+3. **Refactor first model** — `v_stg_adjust__installs.sql`
+   - Replace CASE statement with `{{ map_ad_partner('NETWORK_NAME') }}`
+   - Commit and run CI
+
+4. **Refactor second model** — `v_stg_adjust__touchpoints.sql`
+   - Replace CASE statement with `{{ map_ad_partner('NETWORK_NAME') }}`
+   - Commit and run CI
+
+5. **Validate downstream** — Run downstream models
+   - `dbt build --select int_mmm__daily_channel_installs+ int_mmm__daily_channel_spend+`
+   - Verify no breakage
+
+**Rationale:** Create macro first, validate with test, then refactor models incrementally. Downstream models unchanged.
+
+### Phase 5: Expand Test Coverage (Singular Tests)
+
+**Build order:**
+
+1. **Create test directory structure**
+   ```bash
+   mkdir tests/mmm tests/mta tests/cross_layer tests/staging
+   ```
+
+2. **Write MMM singular tests** — Domain-specific business rules
+   - `tests/mmm/assert_mmm_daily_grain_completeness.sql`
+   - `tests/mmm/assert_mmm_weekly_rollup_matches_daily.sql`
+   - `tests/mmm/assert_mmm_revenue_source_consistency.sql`
+
+3. **Write MTA singular tests** (if MTA pipeline still active)
+   - `tests/mta/assert_touchpoint_credit_sums_to_one.sql`
+   - `tests/mta/assert_user_journey_lookback_coverage.sql`
+
+4. **Write cross-layer tests** — Validate data integrity across layers
+   - `tests/cross_layer/assert_device_counts_staging_to_marts.sql`
+
+5. **Run and debug tests**
+   - `dbt test --select test_type:singular`
+   - Fix failures (either data issues or test logic)
+
+6. **Add to CI** — Tests automatically run via `dbt build` in CI jobs
+
+**Rationale:** Tests organized by domain for maintainability. MMM tests first (active pipeline), MTA tests second (limited pipeline).
+
+### Phase 6: Source Freshness & Observability
+
+**Build order:**
+
+1. **Add freshness to Adjust sources** — `models/staging/adjust/_adjust__sources.yml`
+   - Add `loaded_at_field: CREATED_AT`
+   - Add `freshness` config with warn/error thresholds
+
+2. **Add freshness to Amplitude sources** — `models/staging/amplitude/_amplitude__sources.yml`
+   - Identify correct timestamp column (EVENT_TIME vs SERVER_UPLOAD_TIME)
+   - Add `freshness` config
+
+3. **Add freshness to Supermetrics sources** — `models/staging/supermetrics/_supermetrics__sources.yml`
+   - Use proxy approach if no ETL timestamp
+   - Add `freshness` config
+
+4. **Add freshness to Revenue sources** — `models/staging/revenue/_revenue__sources.yml`
+   - Add `freshness` config
+
+5. **Create dbt Cloud freshness job**
+   - Schedule: Every 1 hour
+   - Command: `dbt source freshness`
+   - Notifications: Slack or email
+
+6. **Test freshness checks**
+   - Manually run job in dbt Cloud
+   - Verify freshness results appear in logs
+   - Trigger failure (temporarily lower threshold) to test alerting
+
+**Rationale:** Configure freshness incrementally by source, then create scheduled job. Test job before production rollout.
+
+## Component Integration Summary
+
+### New Components
+
+| Component | Type | Location | Purpose |
+|-----------|------|----------|---------|
+| Source freshness configs | YAML properties | `models/staging/*/_*__sources.yml` | Define data freshness SLAs |
+| Singular tests | SQL queries | `tests/mmm/`, `tests/mta/`, `tests/cross_layer/` | Validate business rules |
+| `map_ad_partner` macro | Jinja macro | `macros/map_ad_partner.sql` | DRY AD_PARTNER mapping logic |
+| Freshness monitoring job | dbt Cloud job | dbt Cloud UI | Scheduled freshness checks |
+
+### Modified Components
+
+| Component | Change Type | Purpose |
+|-----------|-------------|---------|
+| `_adjust__sources.yml` | Add freshness config | Monitor Adjust data recency |
+| `_amplitude__sources.yml` | Add freshness config | Monitor Amplitude data recency |
+| `_supermetrics__sources.yml` | Add freshness config | Monitor Supermetrics data recency |
+| `_revenue__sources.yml` | Add freshness config | Monitor Revenue data recency |
+| `v_stg_adjust__installs.sql` | Replace CASE with macro call | Use centralized AD_PARTNER logic |
+| `v_stg_adjust__touchpoints.sql` | Replace CASE with macro call | Use centralized AD_PARTNER logic |
+
+### Unchanged Components
+
+- All intermediate models (no structural changes)
+- All mart models (no structural changes)
+- `network_mapping` seed (still used for Supermetrics mapping)
+- Generic tests in `_models.yml` files (supplemented, not replaced)
+- `generate_schema_name` macro (continues to route schemas by environment)
+
+## Validation Strategy (No Local dbt)
+
+### dbt Cloud CI Validation
+
+**Automatic validation on every PR:**
+
+1. **Macro changes** trigger recompilation of all dependent models
+2. **Test changes** run against modified models (Slim CI)
+3. **Source config changes** validated during compilation (syntax check)
+
+**CI job commands:**
+
+```bash
+# Standard CI job (validates models + tests)
+dbt build --select state:modified+
+
+# Freshness validation (add to CI job for source changes)
+dbt source freshness
+```
+
+### Manual Validation in dbt Cloud
+
+**For freshness configs:**
+
+1. Navigate to dbt Cloud job
+2. Add `dbt source freshness` to commands
+3. Run job manually
+4. Check logs for freshness results
+
+**For singular tests:**
+
+1. Write test SQL file
+2. Commit to feature branch
+3. CI job runs `dbt build` (includes tests)
+4. Review job logs for test results
+
+**For macros:**
+
+1. Create macro file
+2. Commit to feature branch
+3. CI job compiles models using macro
+4. Inspect compiled SQL in dbt Cloud UI
+
+**No local dbt installation required.** All validation happens in dbt Cloud jobs.
+
+### Compiled SQL Inspection
+
+**To verify macro expansion:**
+
+1. Navigate to dbt Cloud job run
+2. Select model (e.g., `v_stg_adjust__installs`)
+3. View "Compiled" tab
+4. Verify macro expanded to full CASE statement
+5. Compare compiled SQL before/after refactor
+
+**This validates macro logic without running queries.**
+
+## Downstream Roadmap Implications
+
+### Phase Ordering Rationale
+
+**Current roadmap order:**
+- Phase 4: DRY Refactor (macro extraction)
+- Phase 5: Expand Test Coverage (singular tests)
+- Phase 6: Source Freshness & Observability
+
+**Architectural justification:**
+
+1. **Phase 4 first** — Macro extraction must complete before comprehensive testing
+   - Reason: Tests should validate macro logic, not duplicated CASE statements
+   - Dependency: Phase 5 singular tests reference staging models refactored in Phase 4
+
+2. **Phase 5 second** — Singular tests validate refactored models and business logic
+   - Reason: Tests protect production pipeline before adding monitoring
+   - Dependency: Tests must pass before adding alerting (Phase 6)
+
+3. **Phase 6 last** — Observability layer assumes stable, tested pipeline
+   - Reason: Freshness alerts only valuable if data pipeline is validated
+   - Dependency: Source freshness should monitor a pipeline with high test coverage
+
+**This order minimizes risk:** Code quality improvements (Phase 4) → validation (Phase 5) → monitoring (Phase 6).
+
+### Research Flags for Future Phases
+
+**Phase 4 (DRY Refactor):**
+- ✅ HIGH confidence — Macro organization well-documented
+- ✅ HIGH confidence — dbt Cloud validation strategy clear
+- ⚠️ MEDIUM confidence — Consistency test strategy requires custom SQL (no built-in test)
+
+**Phase 5 (Expand Test Coverage):**
+- ✅ HIGH confidence — Singular test structure well-documented
+- ✅ HIGH confidence — Test organization patterns clear
+- ⚠️ MEDIUM confidence — Business rule tests require domain knowledge (not architectural)
+
+**Phase 6 (Source Freshness):**
+- ✅ HIGH confidence — Freshness config location and syntax verified
+- ✅ HIGH confidence — dbt Cloud job setup documented
+- ⚠️ MEDIUM confidence — Appropriate thresholds require operational data (SLA analysis)
+
+**No deep research gaps.** All three features have clear integration patterns with existing architecture.
 
 ## Sources
 
-**dbt Testing:**
-- [dbt Data Quality Checks: Types, Benefits & Best Practices | lakefs.io](https://lakefs.io/blog/dbt-data-quality-checks/)
-- [7 dbt Testing Best Practices | Datafold](https://www.datafold.com/blog/7-dbt-testing-best-practices)
-- [A Comprehensive Guide to dbt Tests to Ensure Data Quality | DataCamp](https://www.datacamp.com/tutorial/dbt-tests)
-- [Add data tests to your DAG | dbt Developer Hub](https://docs.getdbt.com/docs/build/data-tests)
-- [dbt Tests Explained: Generic vs Singular | Medium](https://medium.com/@likkilaxminarayana/dbt-tests-explained-generic-vs-singular-with-real-examples-6c08d8dd78a7)
-- [Unit Test vs an Integration Test for dbt | Datafold](https://www.datafold.com/blog/unit-test-vs-an-integration-test-for-dbt)
-- [Unit tests | dbt Developer Hub](https://docs.getdbt.com/docs/build/unit-tests)
+### Official dbt Documentation
 
-**dbt Project Structure:**
-- [Organising a dbt Project: Best Practices - The Data School](https://www.thedataschool.co.uk/curtis-paterson/organising-a-dbt-project-best-practices/)
-- [How we structure our dbt projects | dbt Developer Hub](https://docs.getdbt.com/best-practices/how-we-structure/1-guide-overview)
-- [6. dbt Project Structure Explained | Medium](https://medium.com/@likkilaxminarayana/6-dbt-project-structure-explained-a-practical-guide-for-analytics-engineers-5894f6230756)
-- [test-paths | dbt Developer Hub](https://docs.getdbt.com/reference/project-configs/test-paths)
+- [Source freshness configuration](https://docs.getdbt.com/reference/resource-configs/freshness)
+- [Source freshness deployment](https://docs.getdbt.com/docs/deploy/source-freshness)
+- [Add sources to your DAG](https://docs.getdbt.com/docs/build/sources)
+- [Source configurations](https://docs.getdbt.com/reference/source-configs)
+- [Data tests overview](https://docs.getdbt.com/docs/build/data-tests)
+- [test-paths configuration](https://docs.getdbt.com/reference/project-configs/test-paths)
+- [Jinja and macros](https://docs.getdbt.com/docs/build/jinja-macros)
+- [macro-paths configuration](https://docs.getdbt.com/reference/project-configs/macro-paths)
+- [Continuous integration in dbt Cloud](https://docs.getdbt.com/docs/deploy/ci-jobs)
+- [Get started with CI tests](https://docs.getdbt.com/guides/set-up-ci)
 
-**dbt Macros:**
-- [Jinja and macros | dbt Developer Hub](https://docs.getdbt.com/docs/build/jinja-macros)
-- [dbt macros: What they are and why you should use them | Metaplane](https://www.metaplane.dev/blog/dbt-macros)
-- [How To Write Reusable SQL With dbt Macros And Jinja | Hevo](https://hevodata.com/data-transformation/dbt-macros/)
+### Community Resources and Best Practices
 
-**dbt Seeds:**
-- [Working with dbt Seeds: Quick Tutorial & Critical Best Practices | Dagster](https://dagster.io/guides/working-with-dbt-seeds-quick-tutorial-critical-best-practices)
-- [dbt Seeds: What are they and how to use them | Datafold](https://www.datafold.com/blog/dbt-seeds)
-- [Can I use seeds to load raw data? | dbt Developer Hub](https://docs.getdbt.com/faqs/Seeds/load-raw-data-with-seed)
-- [Seeds in dbt: When and How I Actually Use Them | Medium](https://medium.com/@likkilaxminarayana/seeds-in-dbt-when-and-how-i-actually-use-them-in-real-projects-f38217b88edf)
-
-**Incremental Model Testing:**
-- [Testing incremental models - dbt Community Forum](https://discourse.getdbt.com/t/testing-incremental-models/1528)
-- [dbt Incremental part 2: Implementing & Testing – Joon](https://joonsolutions.com/dbt-incremental-implementing-testing/)
-- [I Tested dbt's Incremental Strategies on 1M Rows | Medium](https://medium.com/@reliabledataengineering/i-tested-dbts-incremental-strategies-on-1m-rows-here-s-what-actually-happened-1628cf03931f)
-
----
-*Architecture research for: WGT dbt Analytics Pipeline - Device Mapping & Testing Integration*
-*Researched: 2026-02-10*
+- [dbt source freshness usage and examples](https://popsql.com/learn-dbt/dbt-sources)
+- [Testing data sources in dbt](https://dbtips.substack.com/p/testing-data-sources-in-dbt)
+- [dbt testing best practices](https://www.datafold.com/blog/7-dbt-testing-best-practices)
+- [dbt project structure guide](https://medium.com/@likkilaxminarayana/6-dbt-project-structure-explained-a-practical-guide-for-analytics-engineers-5894f6230756)
+- [dbt macros comprehensive guide](https://www.datacamp.com/tutorial/dbt-macros)
+- [dbt macros best practices](https://medium.com/tech-with-abhishek/7-dbt-macros-that-actually-made-our-platform-maintainable-02d3e7756860)
+- [Organizing dbt projects](https://www.thedataschool.co.uk/curtis-paterson/organising-a-dbt-project-best-practices/)
