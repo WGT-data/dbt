@@ -32,7 +32,7 @@ WITH adjust_android_devices AS (
     FROM ADJUST.S3_DATA.ANDROID_ACTIVITY_INSTALL
     WHERE ACTIVITY_KIND = 'install'
       AND GPS_ADID IS NOT NULL
-      AND CREATED_AT >= DATEADD(day, -60, CURRENT_DATE())
+      AND TO_TIMESTAMP(CREATED_AT) >= DATEADD(day, -60, CURRENT_DATE())
 )
 
 , amplitude_android_devices AS (
@@ -47,7 +47,7 @@ WITH adjust_android_devices AS (
     FROM AMPLITUDEANALYTICS_AMPLITUDE_DB_364926_SHARE.SCHEMA_726530.EVENTS_726530
     WHERE PLATFORM = 'Android'
       AND DEVICE_ID IS NOT NULL
-      AND TO_TIMESTAMP(EVENT_TIME) >= DATEADD(day, -60, CURRENT_DATE())
+      AND EVENT_TIME >= DATEADD(day, -60, CURRENT_DATE())
 )
 
 , android_matches AS (
@@ -97,7 +97,7 @@ WITH adjust_ios_idfv AS (
     FROM ADJUST.S3_DATA.IOS_ACTIVITY_INSTALL
     WHERE ACTIVITY_KIND = 'install'
       AND IDFV IS NOT NULL
-      AND CREATED_AT >= DATEADD(day, -60, CURRENT_DATE())
+      AND TO_TIMESTAMP(CREATED_AT) >= DATEADD(day, -60, CURRENT_DATE())
 )
 
 , amplitude_ios_devices AS (
@@ -107,7 +107,7 @@ WITH adjust_ios_idfv AS (
     FROM AMPLITUDEANALYTICS_AMPLITUDE_DB_364926_SHARE.SCHEMA_726530.EVENTS_726530
     WHERE PLATFORM = 'iOS'
       AND DEVICE_ID IS NOT NULL
-      AND TO_TIMESTAMP(EVENT_TIME) >= DATEADD(day, -60, CURRENT_DATE())
+      AND EVENT_TIME >= DATEADD(day, -60, CURRENT_DATE())
 )
 
 , ios_idfv_matches AS (
@@ -149,7 +149,7 @@ WITH adjust_ios_idfa AS (
     FROM ADJUST.S3_DATA.IOS_ACTIVITY_INSTALL
     WHERE ACTIVITY_KIND = 'install'
       AND IDFA IS NOT NULL  -- Only devices with IDFA consent
-      AND CREATED_AT >= DATEADD(day, -60, CURRENT_DATE())
+      AND TO_TIMESTAMP(CREATED_AT) >= DATEADD(day, -60, CURRENT_DATE())
 )
 
 , amplitude_ios_devices AS (
@@ -159,7 +159,7 @@ WITH adjust_ios_idfa AS (
     FROM AMPLITUDEANALYTICS_AMPLITUDE_DB_364926_SHARE.SCHEMA_726530.EVENTS_726530
     WHERE PLATFORM = 'iOS'
       AND DEVICE_ID IS NOT NULL
-      AND TO_TIMESTAMP(EVENT_TIME) >= DATEADD(day, -60, CURRENT_DATE())
+      AND EVENT_TIME >= DATEADD(day, -60, CURRENT_DATE())
 )
 
 , ios_idfa_matches AS (
@@ -281,7 +281,7 @@ WITH ios_touchpoints AS (
     FROM AMPLITUDEANALYTICS_AMPLITUDE_DB_364926_SHARE.SCHEMA_726530.EVENTS_726530
     WHERE PLATFORM = 'iOS'
       AND DEVICE_ID IS NOT NULL
-      AND TO_TIMESTAMP(EVENT_TIME) >= DATEADD(day, -60, CURRENT_DATE())
+      AND EVENT_TIME >= DATEADD(day, -60, CURRENT_DATE())
 )
 
 , touchpoint_matches AS (
@@ -326,11 +326,11 @@ WITH android_summary AS (
         (SELECT COUNT(DISTINCT UPPER(GPS_ADID))
          FROM ADJUST.S3_DATA.ANDROID_ACTIVITY_INSTALL
          WHERE ACTIVITY_KIND = 'install' AND GPS_ADID IS NOT NULL
-           AND CREATED_AT >= DATEADD(day, -60, CURRENT_DATE())) AS adjust_devices,
+           AND TO_TIMESTAMP(CREATED_AT) >= DATEADD(day, -60, CURRENT_DATE())) AS adjust_devices,
         (SELECT COUNT(DISTINCT UPPER(DEVICE_ID))
          FROM AMPLITUDEANALYTICS_AMPLITUDE_DB_364926_SHARE.SCHEMA_726530.EVENTS_726530
          WHERE PLATFORM = 'Android' AND DEVICE_ID IS NOT NULL
-           AND TO_TIMESTAMP(EVENT_TIME) >= DATEADD(day, -60, CURRENT_DATE())) AS amplitude_devices,
+           AND EVENT_TIME >= DATEADD(day, -60, CURRENT_DATE())) AS amplitude_devices,
         0 AS matched_devices,  -- Update with actual query results
         0.0 AS match_rate_pct,
         'Baseline BEFORE Phase 3 normalization' AS notes
@@ -343,11 +343,11 @@ WITH android_summary AS (
         (SELECT COUNT(DISTINCT UPPER(IDFV))
          FROM ADJUST.S3_DATA.IOS_ACTIVITY_INSTALL
          WHERE ACTIVITY_KIND = 'install' AND IDFV IS NOT NULL
-           AND CREATED_AT >= DATEADD(day, -60, CURRENT_DATE())) AS adjust_devices,
+           AND TO_TIMESTAMP(CREATED_AT) >= DATEADD(day, -60, CURRENT_DATE())) AS adjust_devices,
         (SELECT COUNT(DISTINCT UPPER(DEVICE_ID))
          FROM AMPLITUDEANALYTICS_AMPLITUDE_DB_364926_SHARE.SCHEMA_726530.EVENTS_726530
          WHERE PLATFORM = 'iOS' AND DEVICE_ID IS NOT NULL
-           AND TO_TIMESTAMP(EVENT_TIME) >= DATEADD(day, -60, CURRENT_DATE())) AS amplitude_devices,
+           AND EVENT_TIME >= DATEADD(day, -60, CURRENT_DATE())) AS amplitude_devices,
         0 AS matched_devices,  -- Update with actual query results
         0.0 AS match_rate_pct,
         'Baseline BEFORE Phase 3 normalization' AS notes
@@ -360,11 +360,11 @@ WITH android_summary AS (
         (SELECT COUNT(DISTINCT UPPER(IDFA))
          FROM ADJUST.S3_DATA.IOS_ACTIVITY_INSTALL
          WHERE ACTIVITY_KIND = 'install' AND IDFA IS NOT NULL
-           AND CREATED_AT >= DATEADD(day, -60, CURRENT_DATE())) AS adjust_devices,
+           AND TO_TIMESTAMP(CREATED_AT) >= DATEADD(day, -60, CURRENT_DATE())) AS adjust_devices,
         (SELECT COUNT(DISTINCT UPPER(DEVICE_ID))
          FROM AMPLITUDEANALYTICS_AMPLITUDE_DB_364926_SHARE.SCHEMA_726530.EVENTS_726530
          WHERE PLATFORM = 'iOS' AND DEVICE_ID IS NOT NULL
-           AND TO_TIMESTAMP(EVENT_TIME) >= DATEADD(day, -60, CURRENT_DATE())) AS amplitude_devices,
+           AND EVENT_TIME >= DATEADD(day, -60, CURRENT_DATE())) AS amplitude_devices,
         0 AS matched_devices,  -- Update with actual query results
         0.0 AS match_rate_pct,
         'Baseline BEFORE Phase 3 normalization (ATT consent ~3%)' AS notes

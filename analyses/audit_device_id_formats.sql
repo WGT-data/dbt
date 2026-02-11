@@ -31,7 +31,7 @@ WITH ios_install_samples AS (
         ROW_NUMBER() OVER (ORDER BY CREATED_AT DESC) AS rn
     FROM ADJUST.S3_DATA.IOS_ACTIVITY_INSTALL
     WHERE ACTIVITY_KIND = 'install'
-      AND CREATED_AT >= DATEADD(day, -60, CURRENT_DATE())
+      AND TO_TIMESTAMP(CREATED_AT) >= DATEADD(day, -60, CURRENT_DATE())
 )
 
 , ios_population_stats AS (
@@ -183,7 +183,7 @@ WITH android_install_samples AS (
         ROW_NUMBER() OVER (ORDER BY CREATED_AT DESC) AS rn
     FROM ADJUST.S3_DATA.ANDROID_ACTIVITY_INSTALL
     WHERE ACTIVITY_KIND = 'install'
-      AND CREATED_AT >= DATEADD(day, -60, CURRENT_DATE())
+      AND TO_TIMESTAMP(CREATED_AT) >= DATEADD(day, -60, CURRENT_DATE())
 )
 
 , android_population_stats AS (
@@ -340,7 +340,7 @@ WITH ios_summary AS (
         ROUND(100.0 * COUNT(IDFA) / COUNT(*), 2) AS idfa_pct
     FROM ADJUST.S3_DATA.IOS_ACTIVITY_INSTALL
     WHERE ACTIVITY_KIND = 'install'
-      AND CREATED_AT >= DATEADD(day, -60, CURRENT_DATE())
+      AND TO_TIMESTAMP(CREATED_AT) >= DATEADD(day, -60, CURRENT_DATE())
 )
 
 , android_summary AS (
@@ -353,7 +353,7 @@ WITH ios_summary AS (
         ROUND(100.0 * COUNT(IDFA) / COUNT(*), 2) AS idfa_field_pct
     FROM ADJUST.S3_DATA.ANDROID_ACTIVITY_INSTALL
     WHERE ACTIVITY_KIND = 'install'
-      AND CREATED_AT >= DATEADD(day, -60, CURRENT_DATE())
+      AND TO_TIMESTAMP(CREATED_AT) >= DATEADD(day, -60, CURRENT_DATE())
 )
 
 SELECT
