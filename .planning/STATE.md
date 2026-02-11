@@ -9,19 +9,19 @@ See: .planning/PROJECT.md (updated 2026-02-10)
 
 ## Current Position
 
-Phase: 3 of 6 (MTA Limitations & MMM Foundation) — IN PROGRESS
-Plan: 1 of 3 (03-01 complete - MTA limitations documented)
-Status: Phase 3 in progress, plans 02 and 03 remain
-Last activity: 2026-02-11 — Completed 03-01-PLAN.md (Document MTA limitations and MMM pivot)
+Phase: 3 of 6 (MTA Limitations & MMM Foundation) — COMPLETE
+Plan: 3 of 3 (all plans complete)
+Status: Phase 3 complete - MMM data foundation built
+Last activity: 2026-02-11 — Completed 03-03-PLAN.md (Build MMM marts layer)
 
-Progress: [████░░░░░░] 40% (Phase 1: 100% complete - 2/2 plans, Phase 2: 100% complete - 2/2 plans, Phase 3: 33% complete - 1/3 plans)
+Progress: [██████░░░░] 60% (Phase 1: 100% complete - 2/2 plans, Phase 2: 100% complete - 2/2 plans, Phase 3: 100% complete - 3/3 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 5
-- Average duration: 5.0 min
-- Total execution time: 0.42 hours
+- Total plans completed: 8
+- Average duration: 4.9 min
+- Total execution time: 0.65 hours
 
 **By Phase:**
 
@@ -29,11 +29,11 @@ Progress: [████░░░░░░] 40% (Phase 1: 100% complete - 2/2 pla
 |-------|-------|-------|----------|
 | 01-test-foundation | 2/2 | 5 min | 2.5 min |
 | 02-device-id-audit | 2/2 | 16 min | 8.0 min |
-| 03-mta-limitations-mmm-foundation | 1/3 | 3 min | 3.0 min |
+| 03-mta-limitations-mmm-foundation | 3/3 | 18 min | 6.0 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (2min), 01-02 (3min), 02-01 (4min), 02-02 (12min), 03-01 (3min)
-- Trend: Phase 3 plan 01 (documentation) completed in 3 minutes
+- Last 5 plans: 01-02 (3min), 02-01 (4min), 02-02 (12min), 03-01 (3min), 03-02 (11min), 03-03 (2min)
+- Trend: Phase 3 complete (6.0 min avg) - mix of research/docs and implementation
 
 *Updated after each plan completion*
 
@@ -61,6 +61,16 @@ Recent decisions affecting current work:
 - 03-01: Existing MTA models preserved (not deleted) for iOS-only tactical analysis with limitation headers
 - 03-01: MMM (Marketing Mix Modeling) is the recommended strategic alternative for budget allocation
 - 03-01: Android MTA fix requires external dependency (Amplitude SDK reconfiguration) — documented without timeline pressure
+- 03-02: Use incremental materialization for MMM intermediate models (spend, installs, revenue aggregations)
+- 03-02: Aggregate by DATE+PLATFORM+CHANNEL grain (no campaign-level detail needed for MMM)
+- 03-02: Use network_mapping seed for consistent AD_PARTNER taxonomy across data sources
+- 03-02: Use S3 device-level installs (not API installs) for accuracy in MMM install counts
+- 03-02: Use Adjust API revenue (not user cohort metrics) to avoid device mapping dependency
+- 03-03: Use hardcoded start_date='2024-01-01' in date spine (not CROSS JOIN for date bounds)
+- 03-03: Materialize marts as 'table' not 'incremental' since date spine requires full grid regeneration
+- 03-03: COALESCE all metrics to 0 for gap-free time series (critical for MMM regression)
+- 03-03: Weekly rollup recomputes KPIs from weekly totals (not averaged from daily KPIs)
+- 03-03: Add data quality flags (HAS_SPEND_DATA, etc.) to distinguish zero-filled from missing data
 
 ### Known Technical Context
 
@@ -81,11 +91,11 @@ None yet.
 
 ### Blockers/Concerns
 
-- **MTA limitations documented and work closed:** Android 0% match (SDK dependency), iOS 7.37% IDFA (ATT), SANs 0% touchpoint data (never shared). MTA cannot serve strategic budget allocation. Preserved for iOS-only tactical analysis.
-- **MMM pivot in progress:** Phase 3 builds MMM data foundation using aggregate data (no device matching dependency). Strategic recommendation documented in mta-limitations.md.
+- **Phase 3 complete - MMM data foundation ready:** MTA limitations documented, MMM pipeline built (staging → intermediate → marts). No device matching dependency. Ready for external MMM tools.
+- **Next phase depends on stakeholder decision:** Phase 4 could continue with MMM modeling in Python (PyMC-Marketing, Robyn, Meridian), or pivot to other priorities. No technical blockers.
 
 ## Session Continuity
 
 Last session: 2026-02-11
-Stopped at: Phase 3 plan 01 complete (MTA limitations documented). Plans 02 and 03 remain.
-Resume file: .planning/phases/03-device-id-normalization-fix/03-02-PLAN.md (next to execute)
+Stopped at: Phase 3 complete (all 3 plans finished). MMM data foundation built.
+Resume file: None (phase complete, awaiting Phase 4 direction or stakeholder input)
