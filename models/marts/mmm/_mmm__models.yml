@@ -1,0 +1,87 @@
+version: 2
+
+models:
+  - name: mmm__daily_channel_summary
+    description: >
+      Primary MMM input table combining daily spend, installs, and revenue
+      at the DATE + PLATFORM + CHANNEL grain. Uses a date spine to ensure
+      complete time series with no gaps (critical for MMM regression models).
+      Metrics are zero-filled for days without activity.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - DATE
+            - PLATFORM
+            - CHANNEL
+    columns:
+      - name: DATE
+        description: Calendar date
+        tests:
+          - not_null
+      - name: PLATFORM
+        description: "iOS or Android"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['iOS', 'Android']
+      - name: CHANNEL
+        description: "Standardized ad partner name (Meta, Google, TikTok, etc.)"
+        tests:
+          - not_null
+      - name: SPEND
+        description: "Marketing spend (from Supermetrics), 0 if no spend"
+      - name: INSTALLS
+        description: "Device-level installs (from Adjust S3), 0 if no installs"
+      - name: REVENUE
+        description: "Adjust-reported revenue, 0 if no revenue"
+      - name: CPI
+        description: "Cost per install (SPEND / INSTALLS), NULL if no installs"
+      - name: ROAS
+        description: "Return on ad spend (REVENUE / SPEND), NULL if no spend"
+      - name: HAS_SPEND_DATA
+        description: "1 if spend data exists for this row, 0 if zero-filled"
+      - name: HAS_INSTALL_DATA
+        description: "1 if install data exists for this row, 0 if zero-filled"
+      - name: HAS_REVENUE_DATA
+        description: "1 if revenue data exists for this row, 0 if zero-filled"
+
+  - name: mmm__weekly_channel_summary
+    description: >
+      Weekly rollup of daily channel summary for MMM tools that prefer
+      weekly granularity. All metrics are summed, KPIs recomputed from
+      weekly totals (not averaged). Includes data coverage indicators.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - WEEK_START_DATE
+            - PLATFORM
+            - CHANNEL
+    columns:
+      - name: WEEK_START_DATE
+        description: "Monday of the week (DATE_TRUNC('week'))"
+        tests:
+          - not_null
+      - name: PLATFORM
+        description: "iOS or Android"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['iOS', 'Android']
+      - name: CHANNEL
+        description: "Standardized ad partner name"
+        tests:
+          - not_null
+      - name: SPEND
+        description: "Weekly total marketing spend"
+      - name: INSTALLS
+        description: "Weekly total installs"
+      - name: REVENUE
+        description: "Weekly total revenue"
+      - name: CPI
+        description: "Weekly cost per install"
+      - name: ROAS
+        description: "Weekly return on ad spend"
+      - name: DAYS_WITH_SPEND
+        description: "Number of days in the week with actual spend data"
+      - name: DAYS_IN_WEEK
+        description: "Total days in the week (7, or less for partial weeks)"
