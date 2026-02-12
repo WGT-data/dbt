@@ -34,7 +34,7 @@ WITH revenue_with_channel AS (
     SELECT
         r.DATE,
         r.PLATFORM,
-        COALESCE(nm.AD_PARTNER, r.PARTNER_NAME) AS CHANNEL,
+        COALESCE(nm.AD_PARTNER, 'Other') AS CHANNEL,
         SUM(r.REVENUE) AS REVENUE,
         SUM(r.ALL_REVENUE) AS ALL_REVENUE,
         SUM(r.AD_REVENUE) AS AD_REVENUE,
@@ -47,6 +47,7 @@ WITH revenue_with_channel AS (
     LEFT JOIN {{ ref('network_mapping') }} nm
         ON r.PARTNER_NAME = nm.ADJUST_NETWORK_NAME
     WHERE r.DATE IS NOT NULL
+      AND r.PLATFORM IN ('iOS', 'Android')
     {% if is_incremental() %}
       AND r.DATE >= DATEADD(day, -7, (SELECT MAX(DATE) FROM {{ this }}))
     {% endif %}
