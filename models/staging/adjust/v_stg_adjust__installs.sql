@@ -62,25 +62,7 @@ SELECT DEVICE_ID
      , IDFA
      , PLATFORM
      , NETWORK_NAME
-     , CASE
-           WHEN NETWORK_NAME IN ('Facebook Installs', 'Instagram Installs', 'Off-Facebook Installs', 'Facebook Messenger Installs') THEN 'Meta'
-           WHEN NETWORK_NAME IN ('Google Ads ACE', 'Google Ads ACI', 'Google Organic Search', 'google') THEN 'Google'
-           WHEN NETWORK_NAME IN ('TikTok SAN', 'TikTok_Paid_Ads_iOS', 'Tiktok Installs') THEN 'TikTok'
-           WHEN NETWORK_NAME = 'Apple Search Ads' THEN 'Apple'
-           WHEN NETWORK_NAME LIKE 'AppLovin%' THEN 'AppLovin'
-           WHEN NETWORK_NAME LIKE 'UnityAds%' THEN 'Unity'
-           WHEN NETWORK_NAME LIKE 'Moloco%' THEN 'Moloco'
-           WHEN NETWORK_NAME LIKE 'Smadex%' THEN 'Smadex'
-           WHEN NETWORK_NAME LIKE 'AdAction%' THEN 'AdAction'
-           WHEN NETWORK_NAME LIKE 'Vungle%' THEN 'Vungle'
-           WHEN NETWORK_NAME = 'Organic' THEN 'Organic'
-           WHEN NETWORK_NAME = 'Unattributed' THEN 'Unattributed'
-           WHEN NETWORK_NAME = 'Untrusted Devices' THEN 'Untrusted'
-           WHEN NETWORK_NAME IN ('wgtgolf', 'WGT_Events_SocialPosts_iOS', 'WGT_GiftCards_Social') THEN 'WGT'
-           WHEN NETWORK_NAME LIKE 'Phigolf%' THEN 'Phigolf'
-           WHEN NETWORK_NAME LIKE 'Ryder%' THEN 'Ryder Cup'
-           ELSE 'Other'
-       END AS AD_PARTNER
+     , {{ map_ad_partner('NETWORK_NAME') }} AS AD_PARTNER
      , CAMPAIGN_NAME
      , CAMPAIGN_ID
      , ADGROUP_NAME
