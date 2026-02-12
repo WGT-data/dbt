@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Document MTA Limitations + MMM Data Foundation** - Document MTA structural limitations and build aggregate MMM input models
 - [x] **Phase 4: DRY Refactor** - Extract duplicated AD_PARTNER logic into reusable macro
 - [x] **Phase 5: MMM Pipeline Hardening + Expand Test Coverage** - Validate MMM models in dbt Cloud and add comprehensive test suite
-- [ ] **Phase 6: Source Freshness & Observability** - Add production monitoring and freshness checks
+- [x] **Phase 6: Source Freshness & Observability** - Add production monitoring and freshness checks
 
 ## Phase Details
 
@@ -113,7 +113,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 06-01-PLAN.md — Configure source freshness for Adjust/Amplitude, create staleness test, set up dbt Cloud freshness job
+- [x] 06-01-PLAN.md — Configure source freshness for Adjust/Amplitude, create staleness test, set up dbt Cloud freshness job
 
 ## Progress
 
@@ -127,8 +127,8 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 3. MTA Limitations + MMM Foundation | 3/3 | Complete | 2026-02-11 |
 | 4. DRY Refactor | 1/1 | Complete | 2026-02-11 |
 | 5. MMM Pipeline Hardening + Expand Test Coverage | 2/2 | Complete | 2026-02-12 |
-| 6. Source Freshness & Observability | 0/1 | Not started | - |
+| 6. Source Freshness & Observability | 1/1 | Complete | 2026-02-12 |
 
 ---
 *Roadmap created: 2026-02-10 for milestone v1.0 Data Integrity*
-*Updated: 2026-02-12 after Phase 5 completion*
+*Updated: 2026-02-12 after Phase 6 completion — all phases complete*

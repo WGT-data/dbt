@@ -9,19 +9,19 @@ See: .planning/PROJECT.md (updated 2026-02-11)
 
 ## Current Position
 
-Phase: 5 of 6 complete (05-mmm-pipeline-hardening-expand-test-coverage)
-Plan: 2 of 2 complete
-Status: Phase 5 complete, Phase 6 not started
-Last activity: 2026-02-12 — Completed 05-02-PLAN.md (dbt Cloud validation + SKAN integration)
+Phase: 6 of 6 complete (06-source-freshness-observability)
+Plan: 1 of 1 complete
+Status: All phases complete — milestone v1.0 ready for completion
+Last activity: 2026-02-12 — Completed 06-01-PLAN.md (source freshness monitoring + dbt Cloud job)
 
-Progress: [████████░░] 83% (Phase 1: 100%, Phase 2: 100%, Phase 3: 100%, Phase 4: 100%, Phase 5: 100%, Phase 6: 0%)
+Progress: [██████████] 100% (Phase 1: 100%, Phase 2: 100%, Phase 3: 100%, Phase 4: 100%, Phase 5: 100%, Phase 6: 100%)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 11
-- Average duration: 5.5 min
-- Total execution time: 1.0 hours
+- Total plans completed: 12
+- Average duration: 5.8 min
+- Total execution time: 1.1 hours
 
 **By Phase:**
 
@@ -32,6 +32,7 @@ Progress: [████████░░] 83% (Phase 1: 100%, Phase 2: 100%, Ph
 | 03-mta-limitations-mmm-foundation | 3/3 | 18 min | 6.0 min |
 | 04-dry-refactor | 1/1 | 2 min | 2.0 min |
 | 05-mmm-pipeline-hardening-expand-test-coverage | 2/2 | 31 min | 15.5 min |
+| 06-source-freshness-observability | 1/1 | 8 min | 8.0 min |
 
 *Updated after each plan completion*
 
@@ -83,6 +84,10 @@ Recent decisions affecting current work:
 - 05-02: Adjust API installs do NOT include SKAN — verified empirically (API ≈ S3, SKAN is additive ~15-20%)
 - 05-02: Add SKAN installs to iOS counts via UNION ALL + SUM — S3 and SKAN are non-overlapping sources
 - 05-02: Use self-referencing date spine test instead of independent date generation — avoids Snowflake date type comparison issues
+- 06-01: Use TO_TIMESTAMP(CREATED_AT) for S3 tables — CREATED_AT is epoch seconds
+- 06-01: Use CAST(DAY AS TIMESTAMP) for API table — DAY is DATE type, dbt freshness requires TIMESTAMP
+- 06-01: Omit loaded_at_field for Amplitude — metadata-based freshness via INFORMATION_SCHEMA.TABLES.LAST_ALTERED
+- 06-01: S3 tables: warn 12h, error 24h; API: warn 30h, error 48h; Amplitude: warn 6h, error 12h
 
 ### Known Technical Context
 
@@ -97,6 +102,7 @@ Recent decisions affecting current work:
 - **MMM pipeline validated:** 3 intermediate models + 2 mart models running in dbt Cloud. All 29 tests pass.
 - **SKAN integrated:** iOS install counts now include SKAdNetwork postbacks (~15-20% additional installs from non-ATT users).
 - **Revenue model scoped:** Only iOS/Android platforms included. Non-mobile (windows $48K, server, macos) excluded — no corresponding spend/install data for MMM.
+- **Source freshness configured:** All 16 sources monitored via dbt Cloud job (every 6h). Adjust S3 currently stale (expected). Amplitude passing. Staleness test for static mapping table active.
 
 ### Pending Todos
 
@@ -111,5 +117,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-12
-Stopped at: Completed Phase 5 (MMM Pipeline Hardening)
+Stopped at: All 6 phases complete — milestone v1.0 ready for completion
 Resume file: None
