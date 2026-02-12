@@ -9,19 +9,19 @@ See: .planning/PROJECT.md (updated 2026-02-11)
 
 ## Current Position
 
-Phase: 4 - DRY Refactor
-Plan: Awaiting planning
-Status: Ready to begin Phase 4 after completing Phases 1-3
-Last activity: 2026-02-11 — Roadmap updated for remaining v1.0 work (Phases 4-6)
+Phase: 4 of 6 (04-dry-refactor)
+Plan: 1 of 1 complete
+Status: Phase 4 complete
+Last activity: 2026-02-11 — Completed 04-01-PLAN.md (AD_PARTNER macro extraction)
 
-Progress: [██████░░░░] 60% (Phase 1: 100%, Phase 2: 100%, Phase 3: 100%, Phases 4-6: 0%)
+Progress: [███████░░░] 66% (Phase 1: 100%, Phase 2: 100%, Phase 3: 100%, Phase 4: 100%, Phases 5-6: 0%)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 7
-- Average duration: 5.6 min
-- Total execution time: 0.65 hours
+- Total plans completed: 8
+- Average duration: 5.0 min
+- Total execution time: 0.68 hours
 
 **By Phase:**
 
@@ -30,10 +30,11 @@ Progress: [██████░░░░] 60% (Phase 1: 100%, Phase 2: 100%, Ph
 | 01-test-foundation | 2/2 | 5 min | 2.5 min |
 | 02-device-id-audit | 2/2 | 16 min | 8.0 min |
 | 03-mta-limitations-mmm-foundation | 3/3 | 18 min | 6.0 min |
+| 04-dry-refactor | 1/1 | 2 min | 2.0 min |
 
 **Recent Trend:**
-- Last 6 plans: 01-01 (2min), 01-02 (3min), 02-01 (4min), 02-02 (12min), 03-01 (3min), 03-02 (11min), 03-03 (4min)
-- Trend: Phase 3 complete (6.0 min avg) - mix of research/docs and implementation
+- Last 7 plans: 01-01 (2min), 01-02 (3min), 02-01 (4min), 02-02 (12min), 03-01 (3min), 03-02 (11min), 03-03 (4min), 04-01 (2min)
+- Trend: Phase 4 complete (2.0 min avg) - efficient refactoring work
 
 *Updated after each plan completion*
 
@@ -73,6 +74,10 @@ Recent decisions affecting current work:
 - 03-03: Add data quality flags (HAS_SPEND_DATA, etc.) to distinguish zero-filled from missing data
 - Milestone: Phases 4-6 redefined for MMM-first strategy (DRY refactor, MMM hardening + testing, source freshness)
 - Milestone: TEST-06/07/08 redefined for MMM context (date spine, cross-layer, zero-fill) replacing MTA-specific tests
+- 04-01: Extract AD_PARTNER CASE logic into reusable macro to eliminate duplication between installs and touchpoints models
+- 04-01: Add Tapjoy LIKE pattern to fix coverage gap (was falling to 'Other')
+- 04-01: Add TikTok_Paid_Ads_Android to TikTok IN list to fix Android TikTok attribution gap
+- 04-01: Use whitespace-stripped Jinja syntax ({%- -%}) for clean compiled SQL output
 
 ### Known Technical Context
 
@@ -94,12 +99,12 @@ None yet.
 
 ### Blockers/Concerns
 
-- **No technical blockers:** MMM pipeline built locally, needs dbt Cloud validation in Phase 5.
+- **No technical blockers:** MMM pipeline and AD_PARTNER macro built locally, need dbt Cloud validation in Phase 5.
 - **Network mapping coverage unknown:** Need to verify network_mapping seed covers all active partners in Phase 5.
-- **AD_PARTNER duplication:** CASE statement duplicated in installs and touchpoints models — Phase 4 will extract into macro.
+- **AD_PARTNER macro needs dbt Cloud validation:** Macro created but not compiled/tested due to local dbt unavailability (key-pair auth).
 
 ## Session Continuity
 
 Last session: 2026-02-11
-Stopped at: Roadmap updated for Phases 4-6
-Resume file: None (ready to plan Phase 4)
+Stopped at: Completed 04-01-PLAN.md (AD_PARTNER macro extraction)
+Resume file: None (ready to begin Phase 5)
