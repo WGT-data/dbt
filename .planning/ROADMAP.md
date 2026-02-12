@@ -110,10 +110,10 @@ Plans:
   2. Source freshness configured for Amplitude sources using appropriate timestamp proxy column as loaded_at_field
   3. Stale static table detection alerts when ADJUST_AMPLITUDE_DEVICE_MAPPING hasn't been refreshed in more than 30 days (using INFORMATION_SCHEMA.TABLES.LAST_ALTERED)
   4. Source freshness runs as scheduled job in dbt Cloud separate from model build jobs
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] TBD (set during planning)
+- [ ] 06-01-PLAN.md — Configure source freshness for Adjust/Amplitude, create staleness test, set up dbt Cloud freshness job
 
 ## Progress
 
@@ -127,7 +127,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 3. MTA Limitations + MMM Foundation | 3/3 | Complete | 2026-02-11 |
 | 4. DRY Refactor | 1/1 | Complete | 2026-02-11 |
 | 5. MMM Pipeline Hardening + Expand Test Coverage | 2/2 | Complete | 2026-02-12 |
-| 6. Source Freshness & Observability | 0/TBD | Not started | - |
+| 6. Source Freshness & Observability | 0/1 | Not started | - |
 
 ---
 *Roadmap created: 2026-02-10 for milestone v1.0 Data Integrity*
