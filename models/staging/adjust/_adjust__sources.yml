@@ -44,7 +44,7 @@ sources:
     freshness:
       warn_after: {count: 30, period: hour}
       error_after: {count: 48, period: hour}
-    loaded_at_field: "DAY"
+    loaded_at_field: "CAST(DAY AS TIMESTAMP)"
     tables:
       - name: REPORT_DAILY_RAW
         description: Daily aggregated campaign performance data from Adjust API
