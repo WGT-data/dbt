@@ -5,22 +5,22 @@
 See: .planning/PROJECT.md (updated 2026-02-11)
 
 **Core value:** Accurately attribute user acquisition spend to downstream revenue by connecting ad touchpoints to in-app behavior across Adjust and Amplitude.
-**Current focus:** Redefining Phases 4-7 for MMM-first strategy after Phase 3 pivot
+**Current focus:** Phase 4 - DRY Refactor (extract AD_PARTNER macro)
 
 ## Current Position
 
-Phase: Redefining roadmap (Phases 4-7)
-Plan: —
-Status: Defining requirements and roadmap for remaining v1.0 work
-Last activity: 2026-02-11 — Redefined v1.0 requirements for MMM pivot
+Phase: 4 - DRY Refactor
+Plan: Awaiting planning
+Status: Ready to begin Phase 4 after completing Phases 1-3
+Last activity: 2026-02-11 — Roadmap updated for remaining v1.0 work (Phases 4-6)
 
-Progress: [██████░░░░] 60% (Phase 1: 100%, Phase 2: 100%, Phase 3: 100%, Phases 4-7: defining)
+Progress: [██████░░░░] 60% (Phase 1: 100%, Phase 2: 100%, Phase 3: 100%, Phases 4-6: 0%)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 8
-- Average duration: 4.9 min
+- Total plans completed: 7
+- Average duration: 5.6 min
 - Total execution time: 0.65 hours
 
 **By Phase:**
@@ -32,7 +32,7 @@ Progress: [██████░░░░] 60% (Phase 1: 100%, Phase 2: 100%, Ph
 | 03-mta-limitations-mmm-foundation | 3/3 | 18 min | 6.0 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-02 (3min), 02-01 (4min), 02-02 (12min), 03-01 (3min), 03-02 (11min), 03-03 (2min)
+- Last 6 plans: 01-01 (2min), 01-02 (3min), 02-01 (4min), 02-02 (12min), 03-01 (3min), 03-02 (11min), 03-03 (4min)
 - Trend: Phase 3 complete (6.0 min avg) - mix of research/docs and implementation
 
 *Updated after each plan completion*
@@ -71,7 +71,7 @@ Recent decisions affecting current work:
 - 03-03: COALESCE all metrics to 0 for gap-free time series (critical for MMM regression)
 - 03-03: Weekly rollup recomputes KPIs from weekly totals (not averaged from daily KPIs)
 - 03-03: Add data quality flags (HAS_SPEND_DATA, etc.) to distinguish zero-filled from missing data
-- Milestone: Continue v1.0 with redefined Phases 4-7 (DRY refactor, MMM hardening, expanded tests, source freshness)
+- Milestone: Phases 4-6 redefined for MMM-first strategy (DRY refactor, MMM hardening + testing, source freshness)
 - Milestone: TEST-06/07/08 redefined for MMM context (date spine, cross-layer, zero-fill) replacing MTA-specific tests
 
 ### Known Technical Context
@@ -94,11 +94,12 @@ None yet.
 
 ### Blockers/Concerns
 
-- **No technical blockers:** MMM pipeline built locally, needs dbt Cloud validation.
-- **Network mapping coverage unknown:** Need to verify network_mapping seed covers all active partners in source data.
+- **No technical blockers:** MMM pipeline built locally, needs dbt Cloud validation in Phase 5.
+- **Network mapping coverage unknown:** Need to verify network_mapping seed covers all active partners in Phase 5.
+- **AD_PARTNER duplication:** CASE statement duplicated in installs and touchpoints models — Phase 4 will extract into macro.
 
 ## Session Continuity
 
 Last session: 2026-02-11
-Stopped at: Redefining v1.0 roadmap (Phases 4-7) after MMM pivot
-Resume file: None (roadmap creation in progress)
+Stopped at: Roadmap updated for Phases 4-6
+Resume file: None (ready to plan Phase 4)

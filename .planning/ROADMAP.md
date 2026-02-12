@@ -2,7 +2,7 @@
 
 ## Overview
 
-This roadmap addresses critical data quality issues in the WGT dbt analytics pipeline. The journey starts with establishing baseline test coverage (defensive), then auditing device ID mappings to understand current state, fixing broken Android device ID normalization with full-refresh backfills, extracting duplicated logic into DRY macros, expanding test coverage to business rules, and finally adding production monitoring through source freshness checks. The phases are ordered to manage incremental model dependencies and avoid regression risks.
+This roadmap addresses critical data quality issues in the WGT dbt analytics pipeline. The journey starts with establishing baseline test coverage (defensive), then auditing device ID mappings to understand current state, documenting MTA limitations and pivoting to MMM aggregate models. The remaining phases focus on code quality (DRY refactor), MMM pipeline hardening with comprehensive testing, and production observability through source freshness monitoring.
 
 ## Phases
 
@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Device ID Audit** - Investigate actual device ID formats and document iOS limitations
 - [x] **Phase 3: Document MTA Limitations + MMM Data Foundation** - Document MTA structural limitations and build aggregate MMM input models
 - [ ] **Phase 4: DRY Refactor** - Extract duplicated AD_PARTNER logic into reusable macro
-- [ ] **Phase 5: Expand Test Coverage** - Add comprehensive business rule and cross-layer tests
+- [ ] **Phase 5: MMM Pipeline Hardening + Expand Test Coverage** - Validate MMM models in dbt Cloud and add comprehensive test suite
 - [ ] **Phase 6: Source Freshness & Observability** - Add production monitoring and freshness checks
 
 ## Phase Details
@@ -34,8 +34,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 2 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — Install dbt-utils and add staging model tests (PKs, platform, where filters)
-- [ ] 01-02-PLAN.md — Add intermediate model tests (composite keys, FK relationships, platform)
+- [x] 01-01-PLAN.md — Install dbt-utils and add staging model tests (PKs, platform, where filters)
+- [x] 01-02-PLAN.md — Add intermediate model tests (composite keys, FK relationships, platform)
 
 ### Phase 2: Device ID Audit & Documentation
 **Goal**: Investigate actual device ID formats in source systems and document iOS structural limitations before writing normalization logic
@@ -69,43 +69,46 @@ Plans:
 - [x] 03-02-PLAN.md — Build MMM intermediate models (daily channel spend, installs, revenue)
 - [x] 03-03-PLAN.md — Build MMM mart models (daily summary with date spine, weekly rollup) and compile verification
 
-### Phase 4: DRY Refactor (AD_PARTNER Macro)
-**Goal**: Extract duplicated AD_PARTNER CASE statement from installs and touchpoints into single reusable macro to prevent drift
+### Phase 4: DRY Refactor
+**Goal**: Extract duplicated AD_PARTNER CASE statement into reusable macro to prevent drift between installs and touchpoints models
 **Depends on**: Phase 3
 **Requirements**: CODE-01, CODE-02, CODE-04
 **Success Criteria** (what must be TRUE):
-  1. AD_PARTNER CASE statement logic exists in a reusable macro, not duplicated across models
-  2. Consistency test validates that macro produces identical AD_PARTNER values as original CASE statement
-  3. Device ID normalization (UPPER, strip 'R' suffix) is centralized at staging layer with no duplication
-  4. Both staging models (installs and touchpoints) produce identical AD_PARTNER for every NETWORK_NAME after refactor
+  1. AD_PARTNER CASE statement logic exists in macros/map_ad_partner.sql, not duplicated across staging models
+  2. Consistency test validates macro produces identical AD_PARTNER values for all NETWORK_NAME values as original CASE statement
+  3. Both v_stg_adjust__installs and v_stg_adjust__touchpoints produce identical AD_PARTNER for every NETWORK_NAME after refactor
+  4. No SQL errors introduced by macro extraction when models rebuild in dbt Cloud
 **Plans**: TBD
 
 Plans:
 - [ ] TBD (set during planning)
 
-### Phase 5: Expand Test Coverage
-**Goal**: Add comprehensive test suite including singular tests for complex business rules after critical tests stabilize
-**Depends on**: Phase 1, Phase 4
-**Requirements**: TEST-06, TEST-07, TEST-08
+### Phase 5: MMM Pipeline Hardening + Expand Test Coverage
+**Goal**: Validate MMM models run successfully in dbt Cloud and add comprehensive test suite for MMM data quality
+**Depends on**: Phase 4
+**Requirements**: MMM-01, MMM-02, MMM-03, MMM-04, TEST-06, TEST-07, TEST-08
 **Success Criteria** (what must be TRUE):
-  1. Singular test validates that touchpoint credit sums to 1.0 per install per attribution model
-  2. Singular test validates user journey lookback window coverage with no gaps in recent installs
-  3. Cross-layer consistency test validates device counts match from staging to intermediate to marts
-  4. Test suite includes business rules validation, not just data shape tests (uniqueness, not_null)
+  1. All MMM models (3 intermediate, 2 marts) compile and run successfully in dbt Cloud with no SQL errors
+  2. Incremental intermediate models handle both initial full load and subsequent incremental runs without data duplication
+  3. Network mapping seed covers 100% of active PARTNER_NAME values across source data with no unmapped channels in output
+  4. MMM daily summary produces correct KPIs (CPI, ROAS) with no division-by-zero errors or NULL values where metrics exist
+  5. Singular test validates date spine completeness (every date+channel+platform combination has a row, no gaps)
+  6. Singular test validates cross-layer consistency (intermediate spend+installs+revenue totals match daily summary totals)
+  7. Singular test validates zero-fill integrity (HAS_SPEND_DATA, HAS_INSTALL_DATA, HAS_REVENUE_DATA flags correctly distinguish real data from COALESCE zero-fills)
 **Plans**: TBD
 
 Plans:
 - [ ] TBD (set during planning)
 
 ### Phase 6: Source Freshness & Observability
-**Goal**: Add production monitoring including source freshness checks and stale static table detection
+**Goal**: Add production monitoring including source freshness checks for data pipelines and stale static table detection
 **Depends on**: Phase 5
 **Requirements**: FRESH-01, FRESH-02, FRESH-03, FRESH-04
 **Success Criteria** (what must be TRUE):
-  1. Source freshness configured for Adjust sources with appropriate loaded_at_field or proxy timestamp
-  2. Source freshness configured for Amplitude sources with appropriate loaded_at_field or proxy timestamp
-  3. Stale static table detection alerts when ADJUST_AMPLITUDE_DEVICE_MAPPING hasn't been refreshed in more than 30 days
-  4. Source freshness runs as scheduled job separate from model builds
+  1. Source freshness configured for Adjust sources using TO_TIMESTAMP(CREATED_AT) for epoch conversion as loaded_at_field
+  2. Source freshness configured for Amplitude sources using appropriate timestamp proxy column as loaded_at_field
+  3. Stale static table detection alerts when ADJUST_AMPLITUDE_DEVICE_MAPPING hasn't been refreshed in more than 30 days (using INFORMATION_SCHEMA.TABLES.LAST_ALTERED)
+  4. Source freshness runs as scheduled job in dbt Cloud separate from model build jobs
 **Plans**: TBD
 
 Plans:
@@ -122,8 +125,9 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 2. Device ID Audit | 2/2 | Complete | 2026-02-11 |
 | 3. MTA Limitations + MMM Foundation | 3/3 | Complete | 2026-02-11 |
 | 4. DRY Refactor | 0/TBD | Not started | - |
-| 5. Expand Test Coverage | 0/TBD | Not started | - |
+| 5. MMM Pipeline Hardening + Expand Test Coverage | 0/TBD | Not started | - |
 | 6. Source Freshness & Observability | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-02-10 for milestone v1.0 Data Integrity*
+*Updated: 2026-02-11 after Phase 3 completion and MMM pivot*
