@@ -95,10 +95,11 @@ Plans:
   5. Singular test validates date spine completeness (every date+channel+platform combination has a row, no gaps)
   6. Singular test validates cross-layer consistency (intermediate spend+installs+revenue totals match daily summary totals)
   7. Singular test validates zero-fill integrity (HAS_SPEND_DATA, HAS_INSTALL_DATA, HAS_REVENUE_DATA flags correctly distinguish real data from COALESCE zero-fills)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] TBD (set during planning)
+- [ ] 05-01-PLAN.md — Create singular tests (date spine, cross-layer, zero-fill) and network mapping coverage analysis query
+- [ ] 05-02-PLAN.md — Validate MMM pipeline in dbt Cloud, fix issues, confirm all tests pass
 
 ### Phase 6: Source Freshness & Observability
 **Goal**: Add production monitoring including source freshness checks for data pipelines and stale static table detection
@@ -117,7 +118,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -125,9 +126,9 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 2. Device ID Audit | 2/2 | Complete | 2026-02-11 |
 | 3. MTA Limitations + MMM Foundation | 3/3 | Complete | 2026-02-11 |
 | 4. DRY Refactor | 1/1 | Complete | 2026-02-11 |
-| 5. MMM Pipeline Hardening + Expand Test Coverage | 0/TBD | Not started | - |
+| 5. MMM Pipeline Hardening + Expand Test Coverage | 0/2 | In Progress | - |
 | 6. Source Freshness & Observability | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-02-10 for milestone v1.0 Data Integrity*
-*Updated: 2026-02-11 after Phase 4 execution*
+*Updated: 2026-02-11 after Phase 5 planning*
