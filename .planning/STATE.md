@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-11)
 
 **Core value:** Accurately attribute user acquisition spend to downstream revenue by connecting ad touchpoints to in-app behavior across Adjust and Amplitude.
-**Current focus:** Phase 4 - DRY Refactor (extract AD_PARTNER macro)
+**Current focus:** Phase 5 - MMM Pipeline Hardening & Expand Test Coverage
 
 ## Current Position
 
-Phase: 4 of 6 (04-dry-refactor)
-Plan: 1 of 1 complete
-Status: Phase 4 complete
-Last activity: 2026-02-11 — Completed 04-01-PLAN.md (AD_PARTNER macro extraction)
+Phase: 5 of 6 (05-mmm-pipeline-hardening-expand-test-coverage)
+Plan: 1 of 3 complete
+Status: In progress
+Last activity: 2026-02-11 — Completed 05-01-PLAN.md (MMM test creation)
 
-Progress: [███████░░░] 66% (Phase 1: 100%, Phase 2: 100%, Phase 3: 100%, Phase 4: 100%, Phases 5-6: 0%)
+Progress: [███████░░░] 70% (Phase 1: 100%, Phase 2: 100%, Phase 3: 100%, Phase 4: 100%, Phase 5: 33%, Phase 6: 0%)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 8
-- Average duration: 5.0 min
-- Total execution time: 0.68 hours
+- Total plans completed: 9
+- Average duration: 4.6 min
+- Total execution time: 0.70 hours
 
 **By Phase:**
 
@@ -31,10 +31,11 @@ Progress: [███████░░░] 66% (Phase 1: 100%, Phase 2: 100%, Ph
 | 02-device-id-audit | 2/2 | 16 min | 8.0 min |
 | 03-mta-limitations-mmm-foundation | 3/3 | 18 min | 6.0 min |
 | 04-dry-refactor | 1/1 | 2 min | 2.0 min |
+| 05-mmm-pipeline-hardening-expand-test-coverage | 1/3 | 1 min | 1.0 min |
 
 **Recent Trend:**
-- Last 7 plans: 01-01 (2min), 01-02 (3min), 02-01 (4min), 02-02 (12min), 03-01 (3min), 03-02 (11min), 03-03 (4min), 04-01 (2min)
-- Trend: Phase 4 complete (2.0 min avg) - efficient refactoring work
+- Last 7 plans: 01-02 (3min), 02-01 (4min), 02-02 (12min), 03-01 (3min), 03-02 (11min), 03-03 (4min), 04-01 (2min), 05-01 (1min)
+- Trend: Phase 5 started (1.0 min avg so far) - test creation efficient
 
 *Updated after each plan completion*
 
@@ -78,6 +79,10 @@ Recent decisions affecting current work:
 - 04-01: Add Tapjoy LIKE pattern to fix coverage gap (was falling to 'Other')
 - 04-01: Add TikTok_Paid_Ads_Android to TikTok IN list to fix Android TikTok attribution gap
 - 04-01: Use whitespace-stripped Jinja syntax ({%- -%}) for clean compiled SQL output
+- 05-01: Date spine completeness test generates expected grid from active channels and validates every date+channel+platform exists
+- 05-01: Cross-layer consistency test aggregates at DATE+PLATFORM grain and filters mart to HAS_*_DATA=1 to exclude zero-filled rows
+- 05-01: Zero-fill integrity test only checks metric > 0 with flag = 0 violations (not zero metrics with flag = 1, which are valid)
+- 05-01: Network mapping analysis scopes to last 90 days with actual spend/revenue/installs to find active unmapped partners
 
 ### Known Technical Context
 
@@ -90,6 +95,7 @@ Recent decisions affecting current work:
 - **dbt device mapping model:** `int_adjust_amplitude__device_mapping` never built to production.
 - SANs (Meta, Google, Apple, TikTok) will never have MTA data (no touchpoint sharing).
 - **MMM pipeline built:** 3 intermediate models + 2 mart models, independent of device matching. Uses Adjust API revenue.
+- **MMM tests created:** 3 singular tests (date spine completeness, cross-layer consistency, zero-fill integrity) ready for dbt Cloud validation.
 
 ### Pending Todos
 
@@ -106,5 +112,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-11
-Stopped at: Completed 04-01-PLAN.md (AD_PARTNER macro extraction)
-Resume file: None (ready to begin Phase 5)
+Stopped at: Completed 05-01-PLAN.md (MMM test creation)
+Resume file: None
