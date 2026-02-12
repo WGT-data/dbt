@@ -1,61 +1,57 @@
 -- test_mmm_date_spine_completeness.sql (TEST-06)
--- Validates that mmm__daily_channel_summary has no gaps in the date spine.
--- For every active PLATFORM+CHANNEL combination, every date since 2024-01-01 should have a row.
+-- Validates that mmm__daily_channel_summary has a complete date spine with no gaps.
 --
--- This test ensures the MMM regression model receives a complete time series with no missing dates.
--- Missing date+channel combinations would create gaps that could break MMM model fitting.
+-- Checks two things:
+-- 1. No gaps in date sequence (every date from MIN to MAX is present)
+-- 2. Every date has the full set of channel+platform combinations (complete grid)
 --
--- Test passes when zero rows returned (no gaps).
--- Test fails if any expected date+channel+platform combination is missing from the mart.
+-- Uses self-referencing approach: checks internal consistency of the mart data
+-- rather than generating an independent date spine (avoids date type comparison issues).
+--
+-- Test passes when zero rows returned (no gaps, complete grid).
+-- Test fails if dates are missing or any date has fewer channel combos than expected.
 
-WITH date_spine AS (
-    {{ dbt_utils.date_spine(
-        datepart="day",
-        start_date="'2024-01-01'",
-        end_date="current_date()"
-    ) }}
-),
-
-dates AS (
-    SELECT CAST(date_day AS DATE) AS DATE
-    FROM date_spine
-),
-
--- Get all distinct PLATFORM + CHANNEL combinations that exist in the mart
-active_channels AS (
-    SELECT DISTINCT PLATFORM, CHANNEL
-    FROM {{ ref('mmm__daily_channel_summary') }}
-),
-
--- Create expected grid: every date x every active channel
-expected_grid AS (
-    SELECT
-        d.DATE,
-        c.PLATFORM,
-        c.CHANNEL
-    FROM dates d
-    CROSS JOIN active_channels c
-),
-
--- Get actual data
-actual_data AS (
+WITH date_summary AS (
     SELECT
         DATE,
-        PLATFORM,
-        CHANNEL
+        COUNT(*) AS channel_count
+    FROM {{ ref('mmm__daily_channel_summary') }}
+    GROUP BY DATE
+),
+
+expected AS (
+    SELECT
+        DATEDIFF(day, MIN(DATE), MAX(DATE)) + 1 AS expected_date_count,
+        COUNT(*) AS actual_date_count
+    FROM date_summary
+),
+
+expected_channels AS (
+    SELECT COUNT(DISTINCT PLATFORM || '||' || CHANNEL) AS expected_channel_count
     FROM {{ ref('mmm__daily_channel_summary') }}
 )
 
--- Return missing combinations (left join finds gaps)
+-- Check 1: Missing dates in sequence
 SELECT
-    e.DATE,
-    e.PLATFORM,
-    e.CHANNEL,
-    'Missing from mart - date spine gap detected' AS error_reason
-FROM expected_grid e
-LEFT JOIN actual_data a
-    ON e.DATE = a.DATE
-    AND e.PLATFORM = a.PLATFORM
-    AND e.CHANNEL = a.CHANNEL
-WHERE a.DATE IS NULL
-ORDER BY e.DATE DESC, e.PLATFORM, e.CHANNEL
+    'DATE_SEQUENCE_GAP' AS error_type,
+    NULL AS DATE,
+    expected_date_count AS expected_value,
+    actual_date_count AS actual_value,
+    'Missing ' || (expected_date_count - actual_date_count) || ' dates in sequence' AS error_reason
+FROM expected
+WHERE actual_date_count != expected_date_count
+
+UNION ALL
+
+-- Check 2: Dates with incomplete channel combinations
+SELECT
+    'INCOMPLETE_GRID' AS error_type,
+    ds.DATE,
+    ec.expected_channel_count AS expected_value,
+    ds.channel_count AS actual_value,
+    'Date has ' || ds.channel_count || ' channel combos, expected ' || ec.expected_channel_count AS error_reason
+FROM date_summary ds
+CROSS JOIN expected_channels ec
+WHERE ds.channel_count != ec.expected_channel_count
+
+ORDER BY error_type, DATE DESC

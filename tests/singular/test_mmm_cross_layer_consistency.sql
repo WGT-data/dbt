@@ -11,6 +11,7 @@
 --
 -- Only checks rows where HAS_*_DATA = 1 to exclude purely zero-filled date spine rows
 -- (zero-filled rows by definition have no intermediate data to compare against).
+-- Filters intermediate data to >= 2024-01-01 to match the mart's date spine boundary.
 --
 -- Test passes when zero rows returned (all totals match within tolerance).
 -- Test fails if ABS(intermediate - mart) > 0.01 for currency metrics or > 0 for counts.
@@ -45,6 +46,7 @@ WITH intermediate_totals AS (
             0 AS AD_REVENUE,
             0 AS API_INSTALLS
         FROM {{ ref('int_mmm__daily_channel_spend') }}
+        WHERE DATE >= '2024-01-01'
 
         UNION ALL
 
@@ -62,6 +64,7 @@ WITH intermediate_totals AS (
             0 AS AD_REVENUE,
             0 AS API_INSTALLS
         FROM {{ ref('int_mmm__daily_channel_installs') }}
+        WHERE DATE >= '2024-01-01'
 
         UNION ALL
 
@@ -79,6 +82,7 @@ WITH intermediate_totals AS (
             AD_REVENUE,
             API_INSTALLS
         FROM {{ ref('int_mmm__daily_channel_revenue') }}
+        WHERE DATE >= '2024-01-01'
     )
     GROUP BY DATE, PLATFORM
 ),
