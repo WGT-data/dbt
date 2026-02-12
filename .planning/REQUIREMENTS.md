@@ -43,10 +43,10 @@ Requirements for milestone v1.0 Data Integrity. Each maps to roadmap phases.
 
 ### Code Quality (CODE)
 
-- [ ] **CODE-01**: AD_PARTNER CASE statement extracted from v_stg_adjust__installs and v_stg_adjust__touchpoints into reusable macro — Phase 4
-- [ ] **CODE-02**: Consistency test verifies macro produces identical AD_PARTNER values as original CASE statement — Phase 4
+- [x] **CODE-01**: AD_PARTNER CASE statement extracted from v_stg_adjust__installs and v_stg_adjust__touchpoints into reusable macro — Phase 4 complete
+- [x] **CODE-02**: Consistency test verifies macro produces identical AD_PARTNER values as original CASE statement — Phase 4 complete
 - [x] **CODE-03**: Device ID normalization (UPPER, strip 'R' suffix) centralized at staging layer — Already centralized in v_stg_amplitude__merge_ids.sql
-- [ ] **CODE-04**: Both staging models produce identical AD_PARTNER for every NETWORK_NAME after refactor — Phase 4
+- [x] **CODE-04**: Both staging models produce identical AD_PARTNER for every NETWORK_NAME after refactor — Phase 4 complete
 
 ## v2 Requirements
 
@@ -103,18 +103,18 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FRESH-02 | Phase 6 | Pending |
 | FRESH-03 | Phase 6 | Pending |
 | FRESH-04 | Phase 6 | Pending |
-| CODE-01 | Phase 4 | Pending |
-| CODE-02 | Phase 4 | Pending |
+| CODE-01 | Phase 4 | Complete |
+| CODE-02 | Phase 4 | Complete |
 | CODE-03 | Phase 3 | Complete |
-| CODE-04 | Phase 4 | Pending |
+| CODE-04 | Phase 4 | Complete |
 
 **Coverage:**
 - v1.0 requirements: 26 total (22 original + 4 new MMM)
-- Completed: 12
+- Completed: 15
 - N/A: 2
-- Pending: 12 (mapped to Phases 4-6)
+- Pending: 9 (mapped to Phases 5-6)
 - Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-10*
-*Last updated: 2026-02-11 after roadmap update (Phases 4-6)*
+*Last updated: 2026-02-11 after Phase 4 completion*

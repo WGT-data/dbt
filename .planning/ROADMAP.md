@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Test Foundation** - Establish baseline data quality tests before making code changes
 - [x] **Phase 2: Device ID Audit** - Investigate actual device ID formats and document iOS limitations
 - [x] **Phase 3: Document MTA Limitations + MMM Data Foundation** - Document MTA structural limitations and build aggregate MMM input models
-- [ ] **Phase 4: DRY Refactor** - Extract duplicated AD_PARTNER logic into reusable macro
+- [x] **Phase 4: DRY Refactor** - Extract duplicated AD_PARTNER logic into reusable macro
 - [ ] **Phase 5: MMM Pipeline Hardening + Expand Test Coverage** - Validate MMM models in dbt Cloud and add comprehensive test suite
 - [ ] **Phase 6: Source Freshness & Observability** - Add production monitoring and freshness checks
 
@@ -81,7 +81,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 04-01-PLAN.md — Extract AD_PARTNER macro, update staging models, add singular regression test
+- [x] 04-01-PLAN.md — Extract AD_PARTNER macro, update staging models, add singular regression test
 
 ### Phase 5: MMM Pipeline Hardening + Expand Test Coverage
 **Goal**: Validate MMM models run successfully in dbt Cloud and add comprehensive test suite for MMM data quality
@@ -124,10 +124,10 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 1. Test Foundation | 2/2 | Complete | 2026-02-11 |
 | 2. Device ID Audit | 2/2 | Complete | 2026-02-11 |
 | 3. MTA Limitations + MMM Foundation | 3/3 | Complete | 2026-02-11 |
-| 4. DRY Refactor | 0/1 | Not started | - |
+| 4. DRY Refactor | 1/1 | Complete | 2026-02-11 |
 | 5. MMM Pipeline Hardening + Expand Test Coverage | 0/TBD | Not started | - |
 | 6. Source Freshness & Observability | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-02-10 for milestone v1.0 Data Integrity*
-*Updated: 2026-02-11 after Phase 4 planning*
+*Updated: 2026-02-11 after Phase 4 execution*
