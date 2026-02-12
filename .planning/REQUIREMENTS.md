@@ -23,16 +23,16 @@ Requirements for milestone v1.0 Data Integrity. Each maps to roadmap phases.
 - [x] **TEST-03**: Device mapping foreign keys have referential integrity tests (Adjust device_id exists in Amplitude mapping) — Phase 1 complete
 - [x] **TEST-04**: Platform columns have accepted_values tests (iOS, Android only) — Phase 1 complete
 - [x] **TEST-05**: Tests use forward-looking filter (new data only) to avoid historical false positive flood — Phase 1 complete
-- [ ] **TEST-06**: Singular test validates MMM date spine completeness (every date+channel+platform has a row, no gaps) — Phase 5
-- [ ] **TEST-07**: Singular test validates MMM cross-layer consistency (intermediate spend+installs+revenue totals match daily summary) — Phase 5
-- [ ] **TEST-08**: Singular test validates zero-fill integrity (HAS_*_DATA flags correctly distinguish real data from COALESCE zero-fills) — Phase 5
+- [x] **TEST-06**: Singular test validates MMM date spine completeness (every date+channel+platform has a row, no gaps) — Phase 5 complete
+- [x] **TEST-07**: Singular test validates MMM cross-layer consistency (intermediate spend+installs+revenue totals match daily summary) — Phase 5 complete
+- [x] **TEST-08**: Singular test validates zero-fill integrity (HAS_*_DATA flags correctly distinguish real data from COALESCE zero-fills) — Phase 5 complete
 
 ### MMM Pipeline Hardening (MMM) — new
 
-- [ ] **MMM-01**: All MMM models compile and run successfully in dbt Cloud — Phase 5
-- [ ] **MMM-02**: Incremental intermediate models handle both initial full load and subsequent incremental runs — Phase 5
-- [ ] **MMM-03**: Network mapping seed covers all active PARTNER_NAME values across source data (no unmapped channels) — Phase 5
-- [ ] **MMM-04**: MMM daily summary produces correct KPIs (CPI, ROAS) with no division-by-zero errors — Phase 5
+- [x] **MMM-01**: All MMM models compile and run successfully in dbt Cloud — Phase 5 complete
+- [x] **MMM-02**: Incremental intermediate models handle both initial full load and subsequent incremental runs — Phase 5 complete
+- [x] **MMM-03**: Network mapping seed covers all active PARTNER_NAME values across source data (no unmapped channels) — Phase 5 complete
+- [x] **MMM-04**: MMM daily summary produces correct KPIs (CPI, ROAS) with no division-by-zero errors — Phase 5 complete
 
 ### Source Freshness (FRESH)
 
@@ -92,13 +92,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TEST-03 | Phase 1 | Complete |
 | TEST-04 | Phase 1 | Complete |
 | TEST-05 | Phase 1 | Complete |
-| TEST-06 | Phase 5 | Pending |
-| TEST-07 | Phase 5 | Pending |
-| TEST-08 | Phase 5 | Pending |
-| MMM-01 | Phase 5 | Pending |
-| MMM-02 | Phase 5 | Pending |
-| MMM-03 | Phase 5 | Pending |
-| MMM-04 | Phase 5 | Pending |
+| TEST-06 | Phase 5 | Complete |
+| TEST-07 | Phase 5 | Complete |
+| TEST-08 | Phase 5 | Complete |
+| MMM-01 | Phase 5 | Complete |
+| MMM-02 | Phase 5 | Complete |
+| MMM-03 | Phase 5 | Complete |
+| MMM-04 | Phase 5 | Complete |
 | FRESH-01 | Phase 6 | Pending |
 | FRESH-02 | Phase 6 | Pending |
 | FRESH-03 | Phase 6 | Pending |
@@ -110,11 +110,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 **Coverage:**
 - v1.0 requirements: 26 total (22 original + 4 new MMM)
-- Completed: 15
+- Completed: 22
 - N/A: 2
-- Pending: 9 (mapped to Phases 5-6)
+- Pending: 4 (mapped to Phase 6)
 - Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-10*
-*Last updated: 2026-02-11 after Phase 4 completion*
+*Last updated: 2026-02-12 after Phase 5 completion*

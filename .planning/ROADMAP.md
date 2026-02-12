@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Device ID Audit** - Investigate actual device ID formats and document iOS limitations
 - [x] **Phase 3: Document MTA Limitations + MMM Data Foundation** - Document MTA structural limitations and build aggregate MMM input models
 - [x] **Phase 4: DRY Refactor** - Extract duplicated AD_PARTNER logic into reusable macro
-- [ ] **Phase 5: MMM Pipeline Hardening + Expand Test Coverage** - Validate MMM models in dbt Cloud and add comprehensive test suite
+- [x] **Phase 5: MMM Pipeline Hardening + Expand Test Coverage** - Validate MMM models in dbt Cloud and add comprehensive test suite
 - [ ] **Phase 6: Source Freshness & Observability** - Add production monitoring and freshness checks
 
 ## Phase Details
@@ -95,12 +95,11 @@ Plans:
   5. Singular test validates date spine completeness (every date+channel+platform combination has a row, no gaps)
   6. Singular test validates cross-layer consistency (intermediate spend+installs+revenue totals match daily summary totals)
   7. Singular test validates zero-fill integrity (HAS_SPEND_DATA, HAS_INSTALL_DATA, HAS_REVENUE_DATA flags correctly distinguish real data from COALESCE zero-fills)
-**Plans**: 3 plans
+**Plans**: 2 plans
 
 Plans:
 - [x] 05-01-PLAN.md — Create singular tests (date spine, cross-layer, zero-fill) and network mapping coverage analysis query
-- [ ] 05-02-PLAN.md — Validate MMM pipeline in dbt Cloud, fix issues, confirm all tests pass
-- [ ] 05-03-PLAN.md — TBD (additional testing/validation)
+- [x] 05-02-PLAN.md — Validate MMM pipeline in dbt Cloud, fix issues, add SKAN installs, confirm all tests pass
 
 ### Phase 6: Source Freshness & Observability
 **Goal**: Add production monitoring including source freshness checks for data pipelines and stale static table detection
@@ -127,9 +126,9 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 2. Device ID Audit | 2/2 | Complete | 2026-02-11 |
 | 3. MTA Limitations + MMM Foundation | 3/3 | Complete | 2026-02-11 |
 | 4. DRY Refactor | 1/1 | Complete | 2026-02-11 |
-| 5. MMM Pipeline Hardening + Expand Test Coverage | 1/3 | In Progress | - |
+| 5. MMM Pipeline Hardening + Expand Test Coverage | 2/2 | Complete | 2026-02-12 |
 | 6. Source Freshness & Observability | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-02-10 for milestone v1.0 Data Integrity*
-*Updated: 2026-02-11 after Phase 5 planning*
+*Updated: 2026-02-12 after Phase 5 completion*
