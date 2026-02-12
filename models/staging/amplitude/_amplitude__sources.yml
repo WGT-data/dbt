@@ -5,6 +5,9 @@ sources:
     description: Amplitude product analytics data
     database: AMPLITUDEANALYTICS_AMPLITUDE_DB_364926_SHARE
     schema: SCHEMA_726530
+    freshness:
+      warn_after: {count: 6, period: hour}
+      error_after: {count: 12, period: hour}
     tables:
       - name: MERGE_IDS_726530
         description: Device ID to User ID mapping
