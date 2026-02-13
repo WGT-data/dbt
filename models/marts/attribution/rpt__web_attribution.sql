@@ -1,40 +1,56 @@
 -- rpt__web_attribution.sql
--- Web traffic attribution report from Amplitude events
+-- Web traffic attribution report with multi-touch attribution for registrations
 --
--- PURPOSE: Surface web attribution data that Amplitude captures but no dbt model
--- currently exposes. Shows traffic sources, UTM parameters, and downstream
--- conversion metrics (registrations, revenue) for the wgt.com web platform.
+-- PURPOSE: Surface web attribution data from Amplitude with proper multi-touch
+-- attribution for registrations. Shows 5 attribution models side-by-side so you
+-- can see how credit shifts between channels (e.g., Facebook drives discovery
+-- but users return via Google/direct to register).
 --
--- ATTRIBUTION: Session-level (current visit UTMs), not first-touch.
--- Each session gets its own source/medium/campaign based on the UTM params
--- or referrer that brought the user to the site for that visit.
+-- MULTI-TOUCH ATTRIBUTION:
+-- Uses the int_web_mta pipeline which links anonymous pre-registration browser
+-- sessions to registrations via Amplitude's DEVICE_ID identity bridge.
+-- 5 attribution models: last-touch, first-touch, linear, time-decay, position-based.
 --
--- DATA SOURCE: Amplitude web events (PLATFORM = 'Web')
---   - session_start events carry session-level UTM params in USER_PROPERTIES
---   - FTE_REGISTERED events track new player registrations
---   - Revenue events track purchases with dollar amounts
---
--- NOTE: Amplitude stores 'EMPTY' (literal string) for missing attribution
--- values, not NULL. All extractions use NULLIF to normalize.
+-- TOTAL TRAFFIC VOLUME:
+-- Also counts ALL anonymous web sessions (not just converting ones) to show
+-- the full traffic funnel: sessions → registrations → revenue.
 --
 -- GRAIN: DATE + TRAFFIC_SOURCE + TRAFFIC_MEDIUM + TRAFFIC_CAMPAIGN
 
 {{ config(
     materialized='table',
-    tags=['mart', 'attribution', 'web']
+    tags=['mart', 'attribution', 'web', 'web_mta']
 ) }}
 
 -- =============================================
--- WEB SESSIONS WITH ATTRIBUTION
--- One row per session, with UTM params from the session_start event
+-- MTA REGISTRATION CREDITS
+-- Fractional registration credit per session touchpoint
 -- =============================================
-WITH web_sessions AS (
+WITH mta_credits AS (
+    SELECT
+        DATE(SESSION_TIMESTAMP) AS DATE
+        , TRAFFIC_SOURCE
+        , TRAFFIC_MEDIUM
+        , TRAFFIC_CAMPAIGN
+        , GAME_USER_ID
+        , SESSION_ID
+        , GCLID
+        , FBCLID
+        , CREDIT_LAST_TOUCH
+        , CREDIT_FIRST_TOUCH
+        , CREDIT_LINEAR
+        , CREDIT_TIME_DECAY
+        , CREDIT_POSITION_BASED
+    FROM {{ ref('int_web_mta__touchpoint_credit') }}
+)
+
+-- =============================================
+-- ALL ANONYMOUS WEB SESSIONS (full traffic volume)
+-- Not just converting users — this is the denominator for conversion rates
+-- =============================================
+, all_sessions AS (
     SELECT
         DATE(EVENT_TIME) AS DATE
-        , USER_ID
-        , SESSION_ID
-
-        -- Session-level attribution (updates each visit)
         , COALESCE(
             NULLIF(TRY_PARSE_JSON(USER_PROPERTIES):utm_source::STRING, 'EMPTY'),
             NULLIF(TRY_PARSE_JSON(USER_PROPERTIES):referring_domain::STRING, 'EMPTY'),
@@ -44,112 +60,83 @@ WITH web_sessions AS (
             AS TRAFFIC_MEDIUM
         , NULLIF(TRY_PARSE_JSON(USER_PROPERTIES):utm_campaign::STRING, 'EMPTY')
             AS TRAFFIC_CAMPAIGN
-        , NULLIF(TRY_PARSE_JSON(USER_PROPERTIES):utm_content::STRING, 'EMPTY')
-            AS TRAFFIC_CONTENT
-        , NULLIF(TRY_PARSE_JSON(USER_PROPERTIES):utm_term::STRING, 'EMPTY')
-            AS TRAFFIC_TERM
-
-        -- Referrer context
-        , NULLIF(TRY_PARSE_JSON(USER_PROPERTIES):referring_domain::STRING, 'EMPTY')
-            AS REFERRING_DOMAIN
-
-        -- Click IDs for paid channel attribution
+        , SESSION_ID
+        , DEVICE_ID AS BROWSER_DEVICE_ID
         , NULLIF(TRY_PARSE_JSON(USER_PROPERTIES):gclid::STRING, 'EMPTY')
             AS GCLID
         , NULLIF(TRY_PARSE_JSON(USER_PROPERTIES):fbclid::STRING, 'EMPTY')
             AS FBCLID
-
     FROM {{ source('amplitude', 'EVENTS_726530') }}
     WHERE PLATFORM = 'Web'
       AND EVENT_TYPE = 'session_start'
+      AND USER_ID IS NULL  -- anonymous sessions (86% of web traffic)
       AND EVENT_TIME IS NOT NULL
 )
 
 -- =============================================
--- NEW PLAYER REGISTRATIONS
--- FTE_REGISTERED = first-time experience registration completed
+-- AGGREGATE TOTAL SESSIONS BY SOURCE
 -- =============================================
-, registrations AS (
+, session_totals AS (
     SELECT
-        DATE(EVENT_TIME) AS DATE
-        , USER_ID
-    FROM {{ source('amplitude', 'EVENTS_726530') }}
-    WHERE PLATFORM = 'Web'
-      AND EVENT_TYPE = 'FTE_REGISTERED'
-      AND EVENT_TIME IS NOT NULL
+        DATE
+        , TRAFFIC_SOURCE
+        , TRAFFIC_MEDIUM
+        , TRAFFIC_CAMPAIGN
+        , COUNT(DISTINCT SESSION_ID) AS SESSIONS
+        , COUNT(DISTINCT BROWSER_DEVICE_ID) AS UNIQUE_DEVICES
+        , COUNT(DISTINCT CASE WHEN GCLID IS NOT NULL THEN SESSION_ID END) AS GCLID_SESSIONS
+        , COUNT(DISTINCT CASE WHEN FBCLID IS NOT NULL THEN SESSION_ID END) AS FBCLID_SESSIONS
+    FROM all_sessions
+    GROUP BY 1, 2, 3, 4
 )
 
 -- =============================================
--- REVENUE EVENTS
--- Purchases with dollar amounts in EVENT_PROPERTIES
+-- AGGREGATE MTA CREDITS BY SOURCE
 -- =============================================
-, revenue_events AS (
+, registration_credits AS (
     SELECT
-        DATE(EVENT_TIME) AS DATE
-        , USER_ID
-        , TRY_PARSE_JSON(EVENT_PROPERTIES):"$revenue"::FLOAT AS REVENUE_AMOUNT
-    FROM {{ source('amplitude', 'EVENTS_726530') }}
-    WHERE PLATFORM = 'Web'
-      AND EVENT_TYPE = 'Revenue'
-      AND EVENT_TIME IS NOT NULL
+        DATE
+        , TRAFFIC_SOURCE
+        , TRAFFIC_MEDIUM
+        , TRAFFIC_CAMPAIGN
+        , SUM(CREDIT_LAST_TOUCH) AS REGS_LAST_TOUCH
+        , SUM(CREDIT_FIRST_TOUCH) AS REGS_FIRST_TOUCH
+        , SUM(CREDIT_LINEAR) AS REGS_LINEAR
+        , SUM(CREDIT_TIME_DECAY) AS REGS_TIME_DECAY
+        , SUM(CREDIT_POSITION_BASED) AS REGS_POSITION_BASED
+        , COUNT(DISTINCT GAME_USER_ID) AS UNIQUE_REGISTRANTS
+    FROM mta_credits
+    GROUP BY 1, 2, 3, 4
 )
 
 -- =============================================
--- SESSION-USER-DATE BRIDGE
--- Link sessions to their registrations and revenue on the same date
--- =============================================
-, session_conversions AS (
-    SELECT
-        ws.DATE
-        , ws.TRAFFIC_SOURCE
-        , ws.TRAFFIC_MEDIUM
-        , ws.TRAFFIC_CAMPAIGN
-        , ws.SESSION_ID
-        , ws.USER_ID
-        , ws.GCLID
-        , ws.FBCLID
-
-        -- Did this user register on this date?
-        , CASE WHEN r.USER_ID IS NOT NULL THEN 1 ELSE 0 END AS IS_REGISTRATION
-
-        -- Revenue from this user on this date
-        , rev.REVENUE_AMOUNT
-        , CASE WHEN rev.USER_ID IS NOT NULL THEN 1 ELSE 0 END AS IS_PAYING
-
-    FROM web_sessions ws
-    LEFT JOIN registrations r
-        ON ws.USER_ID = r.USER_ID
-        AND ws.DATE = r.DATE
-    LEFT JOIN (
-        SELECT DATE, USER_ID, SUM(REVENUE_AMOUNT) AS REVENUE_AMOUNT
-        FROM revenue_events
-        GROUP BY 1, 2
-    ) rev
-        ON ws.USER_ID = rev.USER_ID
-        AND ws.DATE = rev.DATE
-)
-
--- =============================================
--- FINAL AGGREGATION
+-- COMBINE TRAFFIC + REGISTRATIONS
 -- =============================================
 SELECT
-    DATE
-    , TRAFFIC_SOURCE
-    , TRAFFIC_MEDIUM
-    , TRAFFIC_CAMPAIGN
+    COALESCE(st.DATE, rc.DATE) AS DATE
+    , COALESCE(st.TRAFFIC_SOURCE, rc.TRAFFIC_SOURCE) AS TRAFFIC_SOURCE
+    , COALESCE(st.TRAFFIC_MEDIUM, rc.TRAFFIC_MEDIUM) AS TRAFFIC_MEDIUM
+    , COALESCE(st.TRAFFIC_CAMPAIGN, rc.TRAFFIC_CAMPAIGN) AS TRAFFIC_CAMPAIGN
 
-    -- Traffic volume
-    , COUNT(DISTINCT SESSION_ID) AS SESSIONS
-    , COUNT(DISTINCT USER_ID) AS UNIQUE_USERS
+    -- Traffic volume (all anonymous sessions)
+    , COALESCE(st.SESSIONS, 0) AS SESSIONS
+    , COALESCE(st.UNIQUE_DEVICES, 0) AS UNIQUE_DEVICES
 
-    -- Conversions
-    , COUNT(DISTINCT CASE WHEN IS_REGISTRATION = 1 THEN USER_ID END) AS REGISTRATIONS
-    , COUNT(DISTINCT CASE WHEN IS_PAYING = 1 THEN USER_ID END) AS PAYING_USERS
-    , COALESCE(SUM(CASE WHEN IS_PAYING = 1 THEN REVENUE_AMOUNT END), 0) AS REVENUE
+    -- Multi-touch registration credits (5 models)
+    , COALESCE(rc.REGS_LAST_TOUCH, 0) AS REGS_LAST_TOUCH
+    , COALESCE(rc.REGS_FIRST_TOUCH, 0) AS REGS_FIRST_TOUCH
+    , COALESCE(rc.REGS_LINEAR, 0) AS REGS_LINEAR
+    , COALESCE(rc.REGS_TIME_DECAY, 0) AS REGS_TIME_DECAY
+    , COALESCE(rc.REGS_POSITION_BASED, 0) AS REGS_POSITION_BASED
+    , COALESCE(rc.UNIQUE_REGISTRANTS, 0) AS UNIQUE_REGISTRANTS
 
     -- Paid channel indicators
-    , COUNT(DISTINCT CASE WHEN GCLID IS NOT NULL THEN SESSION_ID END) AS GCLID_SESSIONS
-    , COUNT(DISTINCT CASE WHEN FBCLID IS NOT NULL THEN SESSION_ID END) AS FBCLID_SESSIONS
+    , COALESCE(st.GCLID_SESSIONS, 0) AS GCLID_SESSIONS
+    , COALESCE(st.FBCLID_SESSIONS, 0) AS FBCLID_SESSIONS
 
-FROM session_conversions
-GROUP BY 1, 2, 3, 4
+FROM session_totals st
+FULL OUTER JOIN registration_credits rc
+    ON st.DATE = rc.DATE
+    AND st.TRAFFIC_SOURCE = rc.TRAFFIC_SOURCE
+    AND COALESCE(st.TRAFFIC_MEDIUM, '___NULL___') = COALESCE(rc.TRAFFIC_MEDIUM, '___NULL___')
+    AND COALESCE(st.TRAFFIC_CAMPAIGN, '___NULL___') = COALESCE(rc.TRAFFIC_CAMPAIGN, '___NULL___')
