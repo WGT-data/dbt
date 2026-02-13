@@ -35,3 +35,99 @@ models:
         description: 30-day ROAS using time-decay attribution
       - name: CPI_TIME_DECAY
         description: Cost per install using time-decay attribution
+
+  - name: rpt__mta_vs_adjust_installs
+    description: |
+      Side-by-side comparison of MTA-attributed installs vs Adjust's reported installs
+      at network level. No Amplitude dependency — purely Adjust data.
+
+      Three install perspectives:
+      1. ADJUST_REPORTED_INSTALLS — Adjust API daily report (dashboard numbers)
+      2. ADJUST_S3_INSTALLS — Device-level count from raw S3 install data
+      3. MTA_*_INSTALLS — Fractional installs from 5 MTA attribution models
+
+      Key comparison metrics:
+      - MTA_COVERAGE_PCT: % of Adjust installs that MTA can see (~0% for SANs)
+      - MTA_CREDIT_SHIFT_PCT: How time-decay redistributes credit vs last-touch
+      - HAS_TOUCHPOINT_DATA: Whether the network shares device-level touchpoints
+
+      Known limitations:
+      - SANs (Meta, Google, TikTok, Apple) do not share device-level touchpoints,
+        so MTA coverage will be ~0% for those networks
+      - iOS IDFA consent ~7% limits iOS MTA coverage even for programmatic networks
+      - Android device matching works for Adjust-to-Adjust (GPS_ADID)
+
+      Grain: One row per AD_PARTNER + PLATFORM + DATE
+    columns:
+      - name: AD_PARTNER
+        description: Standardized partner name (Meta, Google, Moloco, etc.)
+      - name: PLATFORM
+        description: iOS or Android
+      - name: DATE
+        description: Install date
+      - name: ADJUST_REPORTED_INSTALLS
+        description: Installs reported by Adjust's API daily report (their last-touch attribution)
+      - name: ADJUST_S3_INSTALLS
+        description: Distinct device count from raw S3 install events
+      - name: MTA_TIME_DECAY_INSTALLS
+        description: MTA-attributed installs using time-decay model (recommended)
+      - name: MTA_COVERAGE_PCT
+        description: MTA installs / Adjust reported installs — shows data coverage gap
+      - name: MTA_CREDIT_SHIFT_PCT
+        description: |
+          (time_decay - last_touch) / last_touch — how much MTA redistributes credit.
+          Positive = network gains credit from multi-touch analysis.
+          Negative = network was over-credited by simple last-touch.
+      - name: HAS_TOUCHPOINT_DATA
+        description: Whether this network shares device-level touchpoints (FALSE for SANs)
+
+  - name: rpt__web_attribution
+    description: |
+      Web traffic attribution report from Amplitude events for the wgt.com platform.
+      Shows traffic sources (UTM parameters, referrers, click IDs) alongside
+      downstream conversion metrics (registrations, revenue).
+
+      Attribution: Session-level (current visit UTMs). Each session gets its own
+      source/medium/campaign based on the UTM params or referrer for that visit.
+      Users returning via different channels get credit to each channel separately.
+
+      Data source: Amplitude EVENTS_726530 (Web platform only)
+      - session_start events for traffic/attribution data
+      - FTE_REGISTERED events for new player registrations
+      - Revenue events for purchase transactions
+
+      Traffic Source Logic:
+      1. If utm_source is present, use it
+      2. Else if referring_domain is present, use it (organic search, social, etc.)
+      3. Else 'direct'
+
+      Grain: One row per DATE + TRAFFIC_SOURCE + TRAFFIC_MEDIUM + TRAFFIC_CAMPAIGN
+    columns:
+      - name: DATE
+        description: Event date
+      - name: TRAFFIC_SOURCE
+        description: |
+          utm_source if present, else referring_domain, else 'direct'.
+          Examples: facebook, wgtemail, google, www.google.com, www.bing.com, direct
+      - name: TRAFFIC_MEDIUM
+        description: |
+          utm_medium value. Examples: RT-ads, email, youtube, web, app, cpc.
+          NULL when traffic source is organic referrer or direct.
+      - name: TRAFFIC_CAMPAIGN
+        description: |
+          utm_campaign value. Examples: flashgone, desktop-newreg, desktopvideoads-Apr2025, wgtemail_36243.
+          NULL when not set in URL params.
+      - name: SESSIONS
+        description: Count of distinct session_start events
+      - name: UNIQUE_USERS
+        description: Count of distinct Amplitude user IDs
+      - name: REGISTRATIONS
+        description: New player registrations (FTE_REGISTERED) attributed to this source on this date
+      - name: PAYING_USERS
+        description: Users with Revenue events on this date from this source
+      - name: REVENUE
+        description: Sum of $revenue from Revenue events
+      - name: GCLID_SESSIONS
+        description: Sessions with a Google Ads click ID (gclid) present
+      - name: FBCLID_SESSIONS
+        description: Sessions with a Facebook click ID (fbclid) present
