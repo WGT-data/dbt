@@ -35,27 +35,3 @@ models:
         description: 30-day ROAS using time-decay attribution
       - name: CPI_TIME_DECAY
         description: Cost per install using time-decay attribution
-
-  - name: mta__network_comparison
-    description: |
-      Network-level summary comparing attribution models.
-      Shows which networks gain or lose credit under different attribution methodologies.
-
-      Key insight columns:
-      - FIRST_TOUCH_VS_LAST_TOUCH_PCT: % difference in credited installs
-        - Positive = network gets MORE credit under first-touch (awareness/prospecting)
-        - Negative = network gets LESS credit under first-touch (retargeting/lower-funnel)
-
-      Grain: One row per AD_PARTNER + PLATFORM + DATE
-    columns:
-      - name: AD_PARTNER
-        description: Standardized partner name
-      - name: FIRST_TOUCH_VS_LAST_TOUCH_PCT
-        description: |
-          Percentage difference between first-touch and last-touch attributed installs.
-          Positive values indicate the network is stronger at awareness/prospecting.
-          Negative values indicate the network is stronger at conversion/retargeting.
-      - name: TIME_DECAY_VS_LAST_TOUCH_PCT
-        description: |
-          Percentage difference between time-decay and last-touch attributed installs.
-          Shows how the recommended model differs from simple last-touch.
