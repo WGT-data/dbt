@@ -26,7 +26,7 @@ models:
 
       Keyword: NOT available in current Adjust data pipeline
 
-      Grain: One row per AD_PARTNER / CAMPAIGN_NAME / ADGROUP_NAME / PLATFORM / COUNTRY / CREATIVE_NETWORK / DATE
+      Grain: One row per AD_PARTNER / NETWORK_NAME / CAMPAIGN_NAME / CAMPAIGN_ID / ADGROUP_NAME / ADGROUP_ID / PLATFORM / COUNTRY / CREATIVE_NETWORK / DATE
     columns:
       - name: DATE
         description: Event date (install date for cohort metrics, report date for spend)
