@@ -1,0 +1,104 @@
+version: 2
+
+models:
+  - name: int_web_mta__user_journey
+    description: |
+      Maps anonymous pre-registration web sessions to registrations via Amplitude's
+      DEVICE_ID identity bridge. This is the web equivalent of int_mta__user_journey.
+
+      Identity Resolution:
+      - Pre-registration: Browser events have USER_ID = NULL, tracked by browser DEVICE_ID
+      - Post-registration: Browser events get game USER_ID stamped on same DEVICE_ID
+      - The transition from NULL to numeric USER_ID on a DEVICE_ID links the identity
+
+      Lookback: 30 days before registration
+      Grain: One row per BROWSER_DEVICE_ID + SESSION_ID + REGISTRATION_TIMESTAMP
+    columns:
+      - name: BROWSER_DEVICE_ID
+        description: Amplitude browser-generated device UUID (UUIDv4)
+      - name: GAME_USER_ID
+        description: Numeric game user ID assigned at registration
+      - name: SESSION_ID
+        description: Amplitude session ID for this touchpoint
+      - name: TRAFFIC_SOURCE
+        description: utm_source or referring_domain or 'direct'
+      - name: TRAFFIC_MEDIUM
+        description: utm_medium value
+      - name: TRAFFIC_CAMPAIGN
+        description: utm_campaign value
+      - name: SESSION_TIMESTAMP
+        description: When this session started
+      - name: REGISTRATION_TIMESTAMP
+        description: When the user registered (first identified browser event)
+      - name: DAYS_TO_REGISTRATION
+        description: Days between session and registration
+      - name: TOUCHPOINT_POSITION
+        description: Position from first session (1 = first)
+      - name: TOTAL_TOUCHPOINTS
+        description: Total sessions in the pre-registration journey
+      - name: IS_FIRST_TOUCH
+        description: 1 if this is the first session in the journey
+      - name: IS_LAST_TOUCH
+        description: 1 if this is the last session before registration
+
+  - name: int_web_mta__touchpoint_credit
+    description: |
+      Calculates attribution credit for each web session touchpoint using 5 models.
+      Web equivalent of int_mta__touchpoint_credit.
+
+      Attribution Models:
+      - Last-Touch: 100% credit to last session before registration
+      - First-Touch: 100% credit to first session in journey
+      - Linear: Equal credit across all sessions
+      - Time-Decay: Exponential decay with 3-day half-life (recommended)
+      - Position-Based: 40% first, 40% last, 20% middle
+
+      Unlike mobile MTA, there is no click vs impression weighting — all web
+      sessions are equal-weight active visits.
+
+      Grain: One row per touchpoint with credit columns added
+    columns:
+      - name: CREDIT_LAST_TOUCH
+        description: Last-touch credit (0 or 1)
+      - name: CREDIT_FIRST_TOUCH
+        description: First-touch credit (0 or 1)
+      - name: CREDIT_LINEAR
+        description: Linear credit (1/total_touchpoints)
+      - name: CREDIT_TIME_DECAY
+        description: Time-decay credit normalized to sum to 1.0 per registration
+      - name: CREDIT_POSITION_BASED
+        description: Position-based credit (40/20/40 split)
+      - name: CREDIT_RECOMMENDED
+        description: Alias for CREDIT_TIME_DECAY (recommended model)
+
+  - name: int_web_mta__user_revenue
+    description: |
+      Per-user revenue metrics for web registrants, used for MTA revenue attribution.
+      Calculates D7/D30/Total revenue windows anchored to REGISTRATION_TIMESTAMP.
+
+      Revenue is CROSS-PLATFORM (no platform filter): a user who registers on web
+      but later pays on iOS/Android/Desktop still counts as web-acquired revenue.
+      This represents the true LTV of web-acquired users.
+
+      Source: WGT.EVENTS.REVENUE (all platforms)
+      Grain: One row per GAME_USER_ID
+    columns:
+      - name: GAME_USER_ID
+        description: Numeric game user ID assigned at registration
+      - name: REGISTRATION_DATE
+        description: Date the user registered on web
+      - name: REGISTRATION_TIMESTAMP
+        description: Timestamp the user registered on web
+      - name: D7_REVENUE
+        description: Total revenue within 7 days of registration (all platforms)
+      - name: D30_REVENUE
+        description: Total revenue within 30 days of registration (all platforms)
+      - name: TOTAL_REVENUE
+        description: Lifetime total revenue after registration (all platforms)
+      - name: IS_PAYER
+        description: 1 if the user has any revenue > 0, else 0
+      - name: JOURNEY_COUNT
+        description: |
+          Number of distinct browser journeys (DEVICE_ID + REGISTRATION_TIMESTAMP pairs)
+          for this user. Used to divide revenue evenly across journeys in MTA attribution
+          so total attributed revenue is conserved (not double-counted).
