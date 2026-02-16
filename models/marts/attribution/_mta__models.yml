@@ -134,6 +134,38 @@ models:
         description: Registration credit using position-based model (40% first, 40% last, 20% middle)
       - name: UNIQUE_REGISTRANTS
         description: Count of distinct game USER_IDs who registered via this source on this date
+      - name: D7_REVENUE_LAST_TOUCH
+        description: 7-day revenue attributed via last-touch model (cross-platform)
+      - name: D7_REVENUE_FIRST_TOUCH
+        description: 7-day revenue attributed via first-touch model (cross-platform)
+      - name: D7_REVENUE_LINEAR
+        description: 7-day revenue attributed via linear model (cross-platform)
+      - name: D7_REVENUE_TIME_DECAY
+        description: 7-day revenue attributed via time-decay model (cross-platform, recommended)
+      - name: D7_REVENUE_POSITION_BASED
+        description: 7-day revenue attributed via position-based model (cross-platform)
+      - name: D30_REVENUE_LAST_TOUCH
+        description: 30-day revenue attributed via last-touch model (cross-platform)
+      - name: D30_REVENUE_FIRST_TOUCH
+        description: 30-day revenue attributed via first-touch model (cross-platform)
+      - name: D30_REVENUE_LINEAR
+        description: 30-day revenue attributed via linear model (cross-platform)
+      - name: D30_REVENUE_TIME_DECAY
+        description: 30-day revenue attributed via time-decay model (cross-platform, recommended)
+      - name: D30_REVENUE_POSITION_BASED
+        description: 30-day revenue attributed via position-based model (cross-platform)
+      - name: TOTAL_REVENUE_LAST_TOUCH
+        description: Lifetime revenue attributed via last-touch model (cross-platform)
+      - name: TOTAL_REVENUE_FIRST_TOUCH
+        description: Lifetime revenue attributed via first-touch model (cross-platform)
+      - name: TOTAL_REVENUE_LINEAR
+        description: Lifetime revenue attributed via linear model (cross-platform)
+      - name: TOTAL_REVENUE_TIME_DECAY
+        description: Lifetime revenue attributed via time-decay model (cross-platform, recommended)
+      - name: TOTAL_REVENUE_POSITION_BASED
+        description: Lifetime revenue attributed via position-based model (cross-platform)
+      - name: UNIQUE_PAYERS
+        description: Count of distinct game USER_IDs who have any revenue (payers) via this source on this date
       - name: GCLID_SESSIONS
         description: Sessions with a Google Ads click ID (gclid) present
       - name: FBCLID_SESSIONS

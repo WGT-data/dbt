@@ -70,3 +70,35 @@ models:
         description: Position-based credit (40/20/40 split)
       - name: CREDIT_RECOMMENDED
         description: Alias for CREDIT_TIME_DECAY (recommended model)
+
+  - name: int_web_mta__user_revenue
+    description: |
+      Per-user revenue metrics for web registrants, used for MTA revenue attribution.
+      Calculates D7/D30/Total revenue windows anchored to REGISTRATION_TIMESTAMP.
+
+      Revenue is CROSS-PLATFORM (no platform filter): a user who registers on web
+      but later pays on iOS/Android/Desktop still counts as web-acquired revenue.
+      This represents the true LTV of web-acquired users.
+
+      Source: WGT.EVENTS.REVENUE (all platforms)
+      Grain: One row per GAME_USER_ID
+    columns:
+      - name: GAME_USER_ID
+        description: Numeric game user ID assigned at registration
+      - name: REGISTRATION_DATE
+        description: Date the user registered on web
+      - name: REGISTRATION_TIMESTAMP
+        description: Timestamp the user registered on web
+      - name: D7_REVENUE
+        description: Total revenue within 7 days of registration (all platforms)
+      - name: D30_REVENUE
+        description: Total revenue within 30 days of registration (all platforms)
+      - name: TOTAL_REVENUE
+        description: Lifetime total revenue after registration (all platforms)
+      - name: IS_PAYER
+        description: 1 if the user has any revenue > 0, else 0
+      - name: JOURNEY_COUNT
+        description: |
+          Number of distinct browser journeys (DEVICE_ID + REGISTRATION_TIMESTAMP pairs)
+          for this user. Used to divide revenue evenly across journeys in MTA attribution
+          so total attributed revenue is conserved (not double-counted).
