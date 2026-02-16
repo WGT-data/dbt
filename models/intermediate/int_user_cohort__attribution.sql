@@ -36,9 +36,8 @@ WITH ios_installs AS (
 )
 
 -- Android installs with attribution
--- Note: Android table has different schema, no COUNTRY column
 , android_installs AS (
-    SELECT 
+    SELECT
         dm.AMPLITUDE_USER_ID AS USER_ID
         , dm.PLATFORM
         , dm.ADJUST_DEVICE_ID
@@ -46,7 +45,7 @@ WITH ios_installs AS (
         , i.CAMPAIGN_NAME
         , i.ADGROUP_NAME
         , i.CREATIVE_NAME
-        , NULL AS COUNTRY
+        , i.COUNTRY
         , TO_TIMESTAMP(i.INSTALLED_AT) AS INSTALL_TIME
         , DATE(TO_TIMESTAMP(i.INSTALLED_AT)) AS INSTALL_DATE
         , ROW_NUMBER() OVER (
