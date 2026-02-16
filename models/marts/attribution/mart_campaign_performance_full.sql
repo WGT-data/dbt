@@ -3,11 +3,11 @@
 -- Includes: Cost, Installs, CPI, CPM, CTR, CVR, IPM
 -- Revenue: Total, D7, D30 with ROAS, ARPI, ARPPU variants
 -- Retention: D1, D7, D30
--- Grain: One row per ad_partner/network/campaign/platform/date
+-- Grain: One row per ad_partner/network/campaign/campaign_id/adgroup/adgroup_id/platform/date
 
 {{ config(
     materialized='incremental',
-    unique_key=['AD_PARTNER', 'NETWORK_NAME', 'CAMPAIGN_NAME', 'ADGROUP_NAME', 'PLATFORM', 'DATE'],
+    unique_key=['AD_PARTNER', 'NETWORK_NAME', 'CAMPAIGN_NAME', 'CAMPAIGN_ID', 'ADGROUP_NAME', 'ADGROUP_ID', 'PLATFORM', 'DATE'],
     incremental_strategy='merge',
     on_schema_change='append_new_columns',
     tags=['mart', 'performance']
@@ -214,14 +214,14 @@ WITH partner_map AS (
         AND LOWER(s.PLATFORM) = LOWER(c.PLATFORM)
 )
 
-SELECT 
+SELECT
     DATE
     , AD_PARTNER
-    , NETWORK_NAME
-    , CAMPAIGN_NAME
-    , CAMPAIGN_ID
-    , ADGROUP_NAME
-    , ADGROUP_ID
+    , COALESCE(NETWORK_NAME, '__none__') AS NETWORK_NAME
+    , COALESCE(CAMPAIGN_NAME, '__none__') AS CAMPAIGN_NAME
+    , COALESCE(CAMPAIGN_ID, '__none__') AS CAMPAIGN_ID
+    , COALESCE(ADGROUP_NAME, '__none__') AS ADGROUP_NAME
+    , COALESCE(ADGROUP_ID, '__none__') AS ADGROUP_ID
     , PLATFORM
     
     -- Core spend metrics
