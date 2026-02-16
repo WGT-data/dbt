@@ -1,0 +1,142 @@
+version: 2
+
+models:
+  - name: mart_exec_summary
+    description: |
+      Executive Summary BI model — campaign performance with Country and Creative dimensions.
+      Extends mart_campaign_performance_full with additional breakdowns for the Executive Summary
+      dashboard.
+
+      Dimensions available:
+      - OS (PLATFORM): iOS, Android
+      - Channel (AD_PARTNER): Meta, Google, Moloco, etc.
+      - Country: from Adjust API (spend) + S3 install data (cohort, iOS only)
+      - Campaign (CAMPAIGN_NAME): network campaign name
+      - Ad Set (ADGROUP_NAME): network ad group name
+      - Creative (CREATIVE_NETWORK): spend-side only — from Adjust API
+
+      Country coverage:
+      - Spend metrics (Cost, CPI, CPM, etc.): country available for both iOS and Android
+      - Cohort metrics (Revenue, ARPPU, Retention): country available for iOS only
+        (Android device-level matching is a known pipeline limitation)
+
+      Creative coverage:
+      - Spend metrics only — S3 creative names use different identifiers than the API,
+        so cohort metrics cannot be broken down by creative
+
+      Keyword: NOT available in current Adjust data pipeline
+
+      Grain: One row per AD_PARTNER / CAMPAIGN_NAME / ADGROUP_NAME / PLATFORM / COUNTRY / CREATIVE_NETWORK / DATE
+    columns:
+      - name: DATE
+        description: Event date (install date for cohort metrics, report date for spend)
+      - name: AD_PARTNER
+        description: Standardized partner name (Meta, Google, Moloco, etc.)
+      - name: NETWORK_NAME
+        description: Raw Adjust network name before standardization
+      - name: CAMPAIGN_NAME
+        description: Campaign name from the ad network
+      - name: CAMPAIGN_ID
+        description: Network campaign identifier
+      - name: ADGROUP_NAME
+        description: Ad group / ad set name from the ad network
+      - name: ADGROUP_ID
+        description: Network ad group identifier
+      - name: PLATFORM
+        description: iOS or Android
+      - name: COUNTRY
+        description: |
+          Install country. Available from both Adjust API (spend side) and S3 install data
+          (cohort side, iOS only). Android cohort metrics will show NULL country due to
+          device matching limitations.
+      - name: CREATIVE_NETWORK
+        description: |
+          Creative name from the ad network API (spend side only). Cohort metrics cannot
+          be broken down by creative because S3 creative identifiers don't match API names.
+          NULL when row comes from cohort data only.
+      - name: COST
+        description: Ad spend from Adjust API
+      - name: CLICKS
+        description: Click count from Adjust API
+      - name: IMPRESSIONS
+        description: Impression count from Adjust API
+      - name: ADJUST_INSTALLS
+        description: Install count reported by Adjust API (their last-touch attribution)
+      - name: ATTRIBUTION_INSTALLS
+        description: Distinct user count from S3 device-level install data matched to Amplitude
+      - name: CPI
+        description: Cost per install (COST / ATTRIBUTION_INSTALLS)
+      - name: CPM
+        description: Cost per mille — (COST / IMPRESSIONS) * 1000
+      - name: CTR
+        description: Click-through rate — CLICKS / IMPRESSIONS
+      - name: CVR
+        description: Conversion rate — ATTRIBUTION_INSTALLS / CLICKS
+      - name: IPM
+        description: Installs per mille — (ATTRIBUTION_INSTALLS / IMPRESSIONS) * 1000
+      - name: TOTAL_REVENUE
+        description: Lifetime total revenue (purchase + ad) for users in this cohort
+      - name: D7_REVENUE
+        description: 7-day total revenue (purchase + ad)
+      - name: D30_REVENUE
+        description: 30-day total revenue (purchase + ad)
+      - name: TOTAL_PURCHASE_REVENUE
+        description: Lifetime IAP (in-app purchase) revenue
+      - name: D7_PURCHASE_REVENUE
+        description: 7-day IAP revenue
+      - name: D30_PURCHASE_REVENUE
+        description: 30-day IAP revenue
+      - name: TOTAL_AD_REVENUE
+        description: Lifetime ad revenue
+      - name: D7_AD_REVENUE
+        description: 7-day ad revenue
+      - name: D30_AD_REVENUE
+        description: 30-day ad revenue
+      - name: TOTAL_ROAS
+        description: Lifetime ROAS — TOTAL_REVENUE / COST
+      - name: D7_ROAS
+        description: 7-day ROAS — D7_REVENUE / COST
+      - name: D30_ROAS
+        description: 30-day ROAS — D30_REVENUE / COST
+      - name: ARPI
+        description: Average revenue per install (lifetime) — TOTAL_REVENUE / ATTRIBUTION_INSTALLS
+      - name: D7_ARPI
+        description: 7-day average revenue per install
+      - name: D30_ARPI
+        description: 30-day average revenue per install
+      - name: TOTAL_PAYING_USERS
+        description: Count of users with any IAP revenue (lifetime)
+      - name: D7_PAYING_USERS
+        description: Count of users with IAP revenue within 7 days
+      - name: D30_PAYING_USERS
+        description: Count of users with IAP revenue within 30 days
+      - name: ARPPU
+        description: Average revenue per paying user (lifetime) — TOTAL_REVENUE / TOTAL_PAYING_USERS
+      - name: D7_ARPPU
+        description: 7-day average revenue per paying user
+      - name: D30_ARPPU
+        description: 30-day average revenue per paying user
+      - name: COST_PER_PAYING_USER
+        description: Cost per paying user (lifetime) — COST / TOTAL_PAYING_USERS
+      - name: D7_COST_PER_PAYING_USER
+        description: Cost per paying user (7-day window)
+      - name: D30_COST_PER_PAYING_USER
+        description: Cost per paying user (30-day window)
+      - name: D1_RETAINED_USERS
+        description: Users who played on day 1 after install
+      - name: D7_RETAINED_USERS
+        description: Users who played on day 7 after install
+      - name: D30_RETAINED_USERS
+        description: Users who played on day 30 after install
+      - name: D1_MATURED_USERS
+        description: Users whose install is at least 1 day old (retention denominator)
+      - name: D7_MATURED_USERS
+        description: Users whose install is at least 7 days old (retention denominator)
+      - name: D30_MATURED_USERS
+        description: Users whose install is at least 30 days old (retention denominator)
+      - name: D1_RETENTION
+        description: Day-1 retention rate — D1_RETAINED_USERS / D1_MATURED_USERS
+      - name: D7_RETENTION
+        description: Day-7 retention rate — D7_RETAINED_USERS / D7_MATURED_USERS
+      - name: D30_RETENTION
+        description: Day-30 retention rate — D30_RETAINED_USERS / D30_MATURED_USERS
