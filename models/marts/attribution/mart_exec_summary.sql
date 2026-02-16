@@ -19,11 +19,11 @@
 --   - Cohort side creative names (S3) use different identifiers and cannot be joined
 --   - Cohort metrics at creative level will be spread across all creatives for a campaign
 --
--- Grain: One row per AD_PARTNER / CAMPAIGN_NAME / ADGROUP_NAME / PLATFORM / COUNTRY / CREATIVE_NETWORK / DATE
+-- Grain: One row per AD_PARTNER / NETWORK_NAME / CAMPAIGN_NAME / CAMPAIGN_ID / ADGROUP_NAME / ADGROUP_ID / PLATFORM / COUNTRY / CREATIVE_NETWORK / DATE
 
 {{ config(
     materialized='incremental',
-    unique_key=['AD_PARTNER', 'CAMPAIGN_NAME', 'ADGROUP_NAME', 'PLATFORM', 'COUNTRY', 'CREATIVE_NETWORK', 'DATE'],
+    unique_key=['AD_PARTNER', 'NETWORK_NAME', 'CAMPAIGN_NAME', 'CAMPAIGN_ID', 'ADGROUP_NAME', 'ADGROUP_ID', 'PLATFORM', 'COUNTRY', 'CREATIVE_NETWORK', 'DATE'],
     incremental_strategy='merge',
     on_schema_change='append_new_columns',
     tags=['mart', 'performance', 'executive']
@@ -235,14 +235,14 @@ WITH partner_map AS (
 SELECT
     DATE
     , AD_PARTNER
-    , NETWORK_NAME
-    , CAMPAIGN_NAME
-    , CAMPAIGN_ID
-    , ADGROUP_NAME
-    , ADGROUP_ID
+    , COALESCE(NETWORK_NAME, '__none__') AS NETWORK_NAME
+    , COALESCE(CAMPAIGN_NAME, '__none__') AS CAMPAIGN_NAME
+    , COALESCE(CAMPAIGN_ID, '__none__') AS CAMPAIGN_ID
+    , COALESCE(ADGROUP_NAME, '__none__') AS ADGROUP_NAME
+    , COALESCE(ADGROUP_ID, '__none__') AS ADGROUP_ID
     , PLATFORM
-    , COUNTRY
-    , CREATIVE_NETWORK
+    , COALESCE(COUNTRY, '__none__') AS COUNTRY
+    , COALESCE(CREATIVE_NETWORK, '__none__') AS CREATIVE_NETWORK
 
     -- Core spend metrics
     , COST
