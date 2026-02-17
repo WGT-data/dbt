@@ -1,0 +1,99 @@
+version: 2
+
+models:
+  - name: mart_exec_summary_measures
+    description: |
+      Power BI Measures Table for the Executive Summary dashboard.
+
+      This is a single-row scaffold table. Create all DAX measures on this table
+      so they appear under a "Measures" group in the Power BI Fields pane.
+
+      IMPORTANT: Do NOT sum the pre-computed ratio columns (CPI, ROAS, ARPI, etc.)
+      from mart_exec_summary. Those are row-level calculations that produce wrong
+      results when aggregated across slicers. Use the DAX measures below instead —
+      they recalculate ratios from the additive base metrics.
+
+      Fact table reference: mart_exec_summary
+
+      ── DAX Measures ──────────────────────────────────────────────────
+
+      -- SPEND METRICS --
+      Total Cost        = SUM(mart_exec_summary[COST])
+      Total Clicks      = SUM(mart_exec_summary[CLICKS])
+      Total Impressions = SUM(mart_exec_summary[IMPRESSIONS])
+
+      -- INSTALL METRICS --
+      Adjust Installs      = SUM(mart_exec_summary[ADJUST_INSTALLS])
+      Attribution Installs = SUM(mart_exec_summary[ATTRIBUTION_INSTALLS])
+
+      -- EFFICIENCY METRICS --
+      CPI = DIVIDE([Total Cost], [Attribution Installs], BLANK())
+      CPM = DIVIDE([Total Cost], [Total Impressions], BLANK()) * 1000
+      CTR = DIVIDE([Total Clicks], [Total Impressions], BLANK())
+      CVR = DIVIDE([Attribution Installs], [Total Clicks], BLANK())
+      IPM = DIVIDE([Attribution Installs], [Total Impressions], BLANK()) * 1000
+
+      -- TOTAL REVENUE --
+      Total Revenue    = SUM(mart_exec_summary[TOTAL_REVENUE])
+      D7 Revenue       = SUM(mart_exec_summary[D7_REVENUE])
+      D30 Revenue      = SUM(mart_exec_summary[D30_REVENUE])
+
+      -- PURCHASE REVENUE (IAP) --
+      Total Purchase Revenue = SUM(mart_exec_summary[TOTAL_PURCHASE_REVENUE])
+      D7 Purchase Revenue    = SUM(mart_exec_summary[D7_PURCHASE_REVENUE])
+      D30 Purchase Revenue   = SUM(mart_exec_summary[D30_PURCHASE_REVENUE])
+
+      -- AD REVENUE --
+      Total Ad Revenue = SUM(mart_exec_summary[TOTAL_AD_REVENUE])
+      D7 Ad Revenue    = SUM(mart_exec_summary[D7_AD_REVENUE])
+      D30 Ad Revenue   = SUM(mart_exec_summary[D30_AD_REVENUE])
+
+      -- ROAS --
+      Total ROAS = DIVIDE([Total Revenue], [Total Cost], BLANK())
+      D7 ROAS    = DIVIDE([D7 Revenue], [Total Cost], BLANK())
+      D30 ROAS   = DIVIDE([D30 Revenue], [Total Cost], BLANK())
+
+      -- ARPI (Average Revenue Per Install) --
+      ARPI     = DIVIDE([Total Revenue], [Attribution Installs], BLANK())
+      D7 ARPI  = DIVIDE([D7 Revenue], [Attribution Installs], BLANK())
+      D30 ARPI = DIVIDE([D30 Revenue], [Attribution Installs], BLANK())
+
+      -- PAYING USERS --
+      Total Paying Users = SUM(mart_exec_summary[TOTAL_PAYING_USERS])
+      D7 Paying Users    = SUM(mart_exec_summary[D7_PAYING_USERS])
+      D30 Paying Users   = SUM(mart_exec_summary[D30_PAYING_USERS])
+
+      -- ARPPU (Average Revenue Per Paying User) --
+      ARPPU     = DIVIDE([Total Revenue], [Total Paying Users], BLANK())
+      D7 ARPPU  = DIVIDE([D7 Revenue], [D7 Paying Users], BLANK())
+      D30 ARPPU = DIVIDE([D30 Revenue], [D30 Paying Users], BLANK())
+
+      -- COST PER PAYING USER --
+      Cost Per Paying User     = DIVIDE([Total Cost], [Total Paying Users], BLANK())
+      D7 Cost Per Paying User  = DIVIDE([Total Cost], [D7 Paying Users], BLANK())
+      D30 Cost Per Paying User = DIVIDE([Total Cost], [D30 Paying Users], BLANK())
+
+      -- RETENTION --
+      D1 Retained Users = SUM(mart_exec_summary[D1_RETAINED_USERS])
+      D7 Retained Users = SUM(mart_exec_summary[D7_RETAINED_USERS])
+      D30 Retained Users = SUM(mart_exec_summary[D30_RETAINED_USERS])
+      D1 Matured Users  = SUM(mart_exec_summary[D1_MATURED_USERS])
+      D7 Matured Users  = SUM(mart_exec_summary[D7_MATURED_USERS])
+      D30 Matured Users = SUM(mart_exec_summary[D30_MATURED_USERS])
+
+      D1 Retention = DIVIDE([D1 Retained Users], [D1 Matured Users], BLANK())
+      D7 Retention = DIVIDE([D7 Retained Users], [D7 Matured Users], BLANK())
+      D30 Retention = DIVIDE([D30 Retained Users], [D30 Matured Users], BLANK())
+
+      -- CONVERSION RATE (Payer %) --
+      Payer Rate     = DIVIDE([Total Paying Users], [Attribution Installs], BLANK())
+      D7 Payer Rate  = DIVIDE([D7 Paying Users], [Attribution Installs], BLANK())
+      D30 Payer Rate = DIVIDE([D30 Paying Users], [Attribution Installs], BLANK())
+
+    columns:
+      - name: MEASURE_ID
+        description: Anchor column (always 1)
+      - name: MEASURE_GROUP
+        description: Label for this measures group
+      - name: LAST_REFRESHED
+        description: Timestamp of the last dbt run

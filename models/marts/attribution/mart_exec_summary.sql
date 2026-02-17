@@ -235,6 +235,25 @@ WITH partner_map AS (
 SELECT
     DATE
     , AD_PARTNER
+    , CASE
+        WHEN AD_PARTNER IN ('Meta', 'Google', 'Apple', 'AppLovin', 'Moloco', 'Unity', 'TikTok', 'Smadex') THEN AD_PARTNER
+        WHEN AD_PARTNER = 'Organic' THEN 'Organic'
+        WHEN AD_PARTNER = 'Unattributed' THEN 'Unattributed'
+        WHEN AD_PARTNER LIKE '%Vungle%' THEN 'Vungle'
+        WHEN AD_PARTNER LIKE '%Liftoff%' OR AD_PARTNER LIKE '%liftoff%' THEN 'Liftoff'
+        WHEN AD_PARTNER LIKE '%Chartboost%' OR AD_PARTNER LIKE '%chartboost%' THEN 'Chartboost'
+        WHEN AD_PARTNER LIKE '%AdColony%' OR AD_PARTNER LIKE '%adcolony%' THEN 'AdColony'
+        WHEN AD_PARTNER LIKE '%AdAction%' THEN 'AdAction'
+        WHEN AD_PARTNER LIKE '%ironSource%' THEN 'ironSource'
+        WHEN AD_PARTNER LIKE '%Cross%Install%' OR AD_PARTNER LIKE '%cross%install%' THEN 'Cross-Install'
+        WHEN AD_PARTNER LIKE '%Tapjoy%' THEN 'Tapjoy'
+        WHEN AD_PARTNER LIKE '%Topgolf%' THEN 'Topgolf (Internal)'
+        WHEN AD_PARTNER LIKE '%applift%' OR AD_PARTNER LIKE '%Applift%' OR AD_PARTNER LIKE '%AppLift%' THEN 'AppLift'
+        WHEN AD_PARTNER LIKE '%Google%' THEN 'Google'
+        WHEN AD_PARTNER LIKE 'Untrusted%' THEN 'Untrusted Devices'
+        WHEN AD_PARTNER IS NULL THEN 'Unknown'
+        ELSE 'Other'
+      END AS AD_PARTNER_GROUPED
     , COALESCE(NETWORK_NAME, '__none__') AS NETWORK_NAME
     , COALESCE(CAMPAIGN_NAME, '__none__') AS CAMPAIGN_NAME
     , COALESCE(CAMPAIGN_ID, '__none__') AS CAMPAIGN_ID
