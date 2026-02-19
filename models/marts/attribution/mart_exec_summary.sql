@@ -6,22 +6,19 @@
 -- allow clean SKAN join (SKAN 3.0 only provides campaign-level postbacks).
 --
 -- DIMENSIONS:
---   - OS (PLATFORM), Channel (AD_PARTNER), Country, Campaign
+--   - OS (PLATFORM), Channel (AD_PARTNER), Campaign
 --   - Adgroup and Creative removed — use mart_campaign_performance_full for that grain
---
--- COUNTRY COVERAGE:
---   - Spend side: both iOS + Android (from Adjust API)
---   - Cohort side: iOS only (Android device matching limitation)
+--   - Country removed — SKAN has no country dimension, so this model aggregates across countries
 --
 -- SKAN COVERAGE:
 --   - iOS only, SKAN 3.0 (campaign level only — no adgroup/creative in postback)
 --   - NEW_INSTALL_COUNT used (excludes redownloads)
 --
--- Grain: One row per AD_PARTNER / NETWORK_NAME / CAMPAIGN_NAME / CAMPAIGN_ID / PLATFORM / COUNTRY / DATE
+-- Grain: One row per AD_PARTNER / NETWORK_NAME / CAMPAIGN_NAME / CAMPAIGN_ID / PLATFORM / DATE
 
 {{ config(
     materialized='incremental',
-    unique_key=['AD_PARTNER', 'NETWORK_NAME', 'CAMPAIGN_NAME', 'CAMPAIGN_ID', 'PLATFORM', 'COUNTRY', 'DATE'],
+    unique_key=['AD_PARTNER', 'NETWORK_NAME', 'CAMPAIGN_NAME', 'CAMPAIGN_ID', 'PLATFORM', 'DATE'],
     incremental_strategy='merge',
     on_schema_change='append_new_columns',
     tags=['mart', 'performance', 'executive']
@@ -44,14 +41,13 @@ WITH partner_map AS (
     WHERE AD_PARTNER IS NOT NULL
 )
 
--- Spend data rolled up to campaign grain
+-- Spend data rolled up to campaign grain (aggregated across countries)
 , spend_data AS (
     SELECT DATE
          , COALESCE(pm.AD_PARTNER, s.PARTNER_NAME) AS AD_PARTNER
          , s.CAMPAIGN_NETWORK AS CAMPAIGN_NAME
          , s.CAMPAIGN_ID_NETWORK AS CAMPAIGN_ID
          , s.PLATFORM
-         , s.COUNTRY
          , SUM(s.NETWORK_COST) AS COST
          , SUM(s.CLICKS) AS CLICKS
          , SUM(s.IMPRESSIONS) AS IMPRESSIONS
@@ -62,10 +58,10 @@ WITH partner_map AS (
     {% if is_incremental() %}
         AND s.DATE >= DATEADD(day, -3, (SELECT MAX(DATE) FROM {{ this }}))
     {% endif %}
-    GROUP BY 1, 2, 3, 4, 5, 6
+    GROUP BY 1, 2, 3, 4, 5
 )
 
--- User attribution data with COUNTRY
+-- User attribution data
 , user_attribution AS (
     SELECT * FROM {{ ref('int_user_cohort__attribution') }}
     {% if is_incremental() %}
@@ -81,7 +77,7 @@ WITH partner_map AS (
     {% endif %}
 )
 
--- Join attribution with metrics, passing through COUNTRY
+-- Join attribution with metrics
 , user_full AS (
     SELECT
         a.USER_ID
@@ -90,7 +86,6 @@ WITH partner_map AS (
         , a.NETWORK_NAME
         , a.CAMPAIGN_NAME
         , a.ADGROUP_NAME
-        , a.COUNTRY
         , a.INSTALL_DATE
         , m.D7_REVENUE
         , m.D30_REVENUE
@@ -117,14 +112,21 @@ WITH partner_map AS (
 )
 
 -- SKAN installs (campaign level only — SKAN 3.0 limitation)
+-- Pre-aggregate to AD_PARTNER + CAMPAIGN_NAME + DATE
 , skan_data AS (
-    SELECT * FROM {{ ref('int_skan__aggregate_attribution') }}
+    SELECT
+        AD_PARTNER
+        , CAMPAIGN_NAME
+        , INSTALL_DATE
+        , SUM(NEW_INSTALL_COUNT) AS NEW_INSTALL_COUNT
+    FROM {{ ref('int_skan__aggregate_attribution') }}
     {% if is_incremental() %}
         WHERE INSTALL_DATE >= DATEADD(day, -35, (SELECT MAX(DATE) FROM {{ this }}))
     {% endif %}
+    GROUP BY AD_PARTNER, CAMPAIGN_NAME, INSTALL_DATE
 )
 
--- Aggregate user metrics by campaign/date/country
+-- Aggregate user metrics by campaign/date (no country dimension)
 , cohort_metrics AS (
     SELECT
         INSTALL_DATE AS DATE
@@ -132,7 +134,6 @@ WITH partner_map AS (
         , NETWORK_NAME
         , CAMPAIGN_NAME
         , PLATFORM
-        , COUNTRY
 
         -- Install counts
         , COUNT(DISTINCT USER_ID) AS ATTRIBUTION_INSTALLS
@@ -169,10 +170,10 @@ WITH partner_map AS (
 
     FROM user_full
     WHERE INSTALL_DATE IS NOT NULL
-    GROUP BY 1, 2, 3, 4, 5, 6
+    GROUP BY 1, 2, 3, 4, 5
 )
 
--- Join spend with cohort metrics and SKAN
+-- Join spend with cohort metrics, then attach SKAN
 , combined AS (
     SELECT
         COALESCE(s.DATE, c.DATE) AS DATE
@@ -181,16 +182,12 @@ WITH partner_map AS (
         , COALESCE(s.CAMPAIGN_NAME, c.CAMPAIGN_NAME) AS CAMPAIGN_NAME
         , s.CAMPAIGN_ID
         , COALESCE(s.PLATFORM, c.PLATFORM) AS PLATFORM
-        , COALESCE(s.COUNTRY, c.COUNTRY) AS COUNTRY
 
         -- Spend metrics
         , COALESCE(s.COST, 0) AS COST
         , COALESCE(s.CLICKS, 0) AS CLICKS
         , COALESCE(s.IMPRESSIONS, 0) AS IMPRESSIONS
         , COALESCE(s.ADJUST_INSTALLS, 0) AS ADJUST_INSTALLS
-
-        -- SKAN installs (iOS only, new installs excluding redownloads)
-        , COALESCE(sk.NEW_INSTALL_COUNT, 0) AS SKAN_INSTALLS
 
         -- Cohort metrics
         , COALESCE(c.ATTRIBUTION_INSTALLS, 0) AS ATTRIBUTION_INSTALLS
@@ -223,13 +220,15 @@ WITH partner_map AS (
         , COALESCE(c.D7_MATURED_USERS, 0) AS D7_MATURED_USERS
         , COALESCE(c.D30_MATURED_USERS, 0) AS D30_MATURED_USERS
 
+        -- SKAN installs (clean 1:1 join — no country fan-out)
+        , COALESCE(sk.NEW_INSTALL_COUNT, 0) AS SKAN_INSTALLS
+
     FROM spend_data s
     FULL OUTER JOIN cohort_metrics c
         ON s.DATE = c.DATE
         AND LOWER(s.AD_PARTNER) = LOWER(c.AD_PARTNER)
         AND LOWER(s.CAMPAIGN_NAME) = LOWER(c.CAMPAIGN_NAME)
         AND LOWER(s.PLATFORM) = LOWER(c.PLATFORM)
-        AND LOWER(COALESCE(s.COUNTRY, '')) = LOWER(COALESCE(c.COUNTRY, ''))
     LEFT JOIN skan_data sk
         ON COALESCE(s.DATE, c.DATE) = sk.INSTALL_DATE
         AND LOWER(COALESCE(s.AD_PARTNER, c.AD_PARTNER)) = LOWER(sk.AD_PARTNER)
@@ -262,7 +261,6 @@ SELECT
     , COALESCE(CAMPAIGN_NAME, '__none__') AS CAMPAIGN_NAME
     , COALESCE(CAMPAIGN_ID, '__none__') AS CAMPAIGN_ID
     , PLATFORM
-    , COALESCE(COUNTRY, '__none__') AS COUNTRY
 
     -- Core spend metrics
     , COST
