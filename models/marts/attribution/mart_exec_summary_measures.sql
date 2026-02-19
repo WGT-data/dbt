@@ -18,11 +18,8 @@ SELECT
     , NETWORK_NAME
     , CAMPAIGN_NAME
     , CAMPAIGN_ID
-    , ADGROUP_NAME
-    , ADGROUP_ID
     , PLATFORM
     , COUNTRY
-    , CREATIVE_NETWORK
 
     -- Spend metrics (additive)
     , COST
@@ -31,6 +28,8 @@ SELECT
 
     -- Install metrics (additive)
     , ADJUST_INSTALLS
+    , SKAN_INSTALLS
+    , TOTAL_INSTALLS
     , ATTRIBUTION_INSTALLS
 
     -- Revenue (additive)

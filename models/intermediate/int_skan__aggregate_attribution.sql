@@ -21,7 +21,7 @@
 WITH skan_installs AS (
     SELECT
         PARTNER
-        , CAMPAIGN_NAME
+        , TRIM(REGEXP_REPLACE(CAMPAIGN_NAME, '\\s*\\(\\d+\\)\\s*$', '')) AS CAMPAIGN_NAME
         , DATE(TO_TIMESTAMP(SK_TS)) AS INSTALL_DATE
         , SK_CONVERSION_VALUE
         , SK_REDOWNLOAD
