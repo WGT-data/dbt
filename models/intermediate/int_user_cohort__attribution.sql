@@ -17,14 +17,14 @@ WITH ios_installs AS (
         , dm.PLATFORM
         , UPPER(dm.ADJUST_DEVICE_ID) AS ADJUST_DEVICE_ID
         , i.NETWORK_NAME
-        , i.CAMPAIGN_NAME
-        , i.ADGROUP_NAME
+        , TRIM(REGEXP_REPLACE(i.CAMPAIGN_NAME, '\\s*\\(\\d+\\)\\s*$', '')) AS CAMPAIGN_NAME
+        , TRIM(REGEXP_REPLACE(i.ADGROUP_NAME, '\\s*\\(\\d+\\)\\s*$', '')) AS ADGROUP_NAME
         , i.CREATIVE_NAME
         , i.COUNTRY
         , TO_TIMESTAMP(i.INSTALLED_AT) AS INSTALL_TIME
         , DATE(TO_TIMESTAMP(i.INSTALLED_AT)) AS INSTALL_DATE
         , ROW_NUMBER() OVER (
-            PARTITION BY dm.AMPLITUDE_USER_ID, dm.PLATFORM 
+            PARTITION BY dm.AMPLITUDE_USER_ID, dm.PLATFORM
             ORDER BY TO_TIMESTAMP(i.INSTALLED_AT) ASC
         ) AS RN
     FROM {{ ref('int_adjust_amplitude__device_mapping') }} dm
@@ -42,14 +42,14 @@ WITH ios_installs AS (
         , dm.PLATFORM
         , dm.ADJUST_DEVICE_ID
         , i.NETWORK_NAME
-        , i.CAMPAIGN_NAME
-        , i.ADGROUP_NAME
+        , TRIM(REGEXP_REPLACE(i.CAMPAIGN_NAME, '\\s*\\(\\d+\\)\\s*$', '')) AS CAMPAIGN_NAME
+        , TRIM(REGEXP_REPLACE(i.ADGROUP_NAME, '\\s*\\(\\d+\\)\\s*$', '')) AS ADGROUP_NAME
         , i.CREATIVE_NAME
         , i.COUNTRY
         , TO_TIMESTAMP(i.INSTALLED_AT) AS INSTALL_TIME
         , DATE(TO_TIMESTAMP(i.INSTALLED_AT)) AS INSTALL_DATE
         , ROW_NUMBER() OVER (
-            PARTITION BY dm.AMPLITUDE_USER_ID, dm.PLATFORM 
+            PARTITION BY dm.AMPLITUDE_USER_ID, dm.PLATFORM
             ORDER BY TO_TIMESTAMP(i.INSTALLED_AT) ASC
         ) AS RN
     FROM {{ ref('int_adjust_amplitude__device_mapping') }} dm
