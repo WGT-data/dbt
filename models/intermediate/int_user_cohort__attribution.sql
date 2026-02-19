@@ -17,8 +17,8 @@ WITH ios_installs AS (
         , dm.PLATFORM
         , UPPER(dm.ADJUST_DEVICE_ID) AS ADJUST_DEVICE_ID
         , i.NETWORK_NAME
-        , TRIM(REGEXP_REPLACE(i.CAMPAIGN_NAME, '\\s*\\(\\d+\\)\\s*$', '')) AS CAMPAIGN_NAME
-        , TRIM(REGEXP_REPLACE(i.ADGROUP_NAME, '\\s*\\(\\d+\\)\\s*$', '')) AS ADGROUP_NAME
+        , TRIM(REGEXP_REPLACE(i.CAMPAIGN_NAME, '\\s*\\([a-zA-Z0-9_-]+\\)\\s*$', '')) AS CAMPAIGN_NAME
+        , TRIM(REGEXP_REPLACE(i.ADGROUP_NAME, '\\s*\\([a-zA-Z0-9_-]+\\)\\s*$', '')) AS ADGROUP_NAME
         , i.CREATIVE_NAME
         , i.COUNTRY
         , TO_TIMESTAMP(i.INSTALLED_AT) AS INSTALL_TIME
@@ -42,8 +42,8 @@ WITH ios_installs AS (
         , dm.PLATFORM
         , dm.ADJUST_DEVICE_ID
         , i.NETWORK_NAME
-        , TRIM(REGEXP_REPLACE(i.CAMPAIGN_NAME, '\\s*\\(\\d+\\)\\s*$', '')) AS CAMPAIGN_NAME
-        , TRIM(REGEXP_REPLACE(i.ADGROUP_NAME, '\\s*\\(\\d+\\)\\s*$', '')) AS ADGROUP_NAME
+        , TRIM(REGEXP_REPLACE(i.CAMPAIGN_NAME, '\\s*\\([a-zA-Z0-9_-]+\\)\\s*$', '')) AS CAMPAIGN_NAME
+        , TRIM(REGEXP_REPLACE(i.ADGROUP_NAME, '\\s*\\([a-zA-Z0-9_-]+\\)\\s*$', '')) AS ADGROUP_NAME
         , i.CREATIVE_NAME
         , i.COUNTRY
         , TO_TIMESTAMP(i.INSTALLED_AT) AS INSTALL_TIME

@@ -9,10 +9,10 @@ WITH IOS_INSTALLS AS (
          , IDFA  -- For deterministic matching when user consented to tracking
          , 'iOS' AS PLATFORM
          , NETWORK_NAME
-         , TRIM(REGEXP_REPLACE(CAMPAIGN_NAME, '\\s*\\(\\d+\\)\\s*$', '')) AS CAMPAIGN_NAME
-         , REGEXP_SUBSTR(CAMPAIGN_NAME, '\\(([0-9]+)\\)$', 1, 1, 'e') AS CAMPAIGN_ID
-         , TRIM(REGEXP_REPLACE(ADGROUP_NAME, '\\s*\\(\\d+\\)\\s*$', '')) AS ADGROUP_NAME
-         , REGEXP_SUBSTR(ADGROUP_NAME, '\\(([0-9]+)\\)$', 1, 1, 'e') AS ADGROUP_ID
+         , TRIM(REGEXP_REPLACE(CAMPAIGN_NAME, '\\s*\\([a-zA-Z0-9_-]+\\)\\s*$', '')) AS CAMPAIGN_NAME
+         , REGEXP_SUBSTR(CAMPAIGN_NAME, '\\(([a-zA-Z0-9_-]+)\\)$', 1, 1, 'e') AS CAMPAIGN_ID
+         , TRIM(REGEXP_REPLACE(ADGROUP_NAME, '\\s*\\([a-zA-Z0-9_-]+\\)\\s*$', '')) AS ADGROUP_NAME
+         , REGEXP_SUBSTR(ADGROUP_NAME, '\\(([a-zA-Z0-9_-]+)\\)$', 1, 1, 'e') AS ADGROUP_ID
          , CREATIVE_NAME
          , TRACKER_NAME
          , COUNTRY
@@ -30,10 +30,10 @@ WITH IOS_INSTALLS AS (
          , NULL AS IDFA  -- Android doesn't have IDFA
          , 'Android' AS PLATFORM
          , NETWORK_NAME
-         , TRIM(REGEXP_REPLACE(CAMPAIGN_NAME, '\\s*\\(\\d+\\)\\s*$', '')) AS CAMPAIGN_NAME
-         , REGEXP_SUBSTR(CAMPAIGN_NAME, '\\(([0-9]+)\\)$', 1, 1, 'e') AS CAMPAIGN_ID
-         , TRIM(REGEXP_REPLACE(ADGROUP_NAME, '\\s*\\(\\d+\\)\\s*$', '')) AS ADGROUP_NAME
-         , REGEXP_SUBSTR(ADGROUP_NAME, '\\(([0-9]+)\\)$', 1, 1, 'e') AS ADGROUP_ID
+         , TRIM(REGEXP_REPLACE(CAMPAIGN_NAME, '\\s*\\([a-zA-Z0-9_-]+\\)\\s*$', '')) AS CAMPAIGN_NAME
+         , REGEXP_SUBSTR(CAMPAIGN_NAME, '\\(([a-zA-Z0-9_-]+)\\)$', 1, 1, 'e') AS CAMPAIGN_ID
+         , TRIM(REGEXP_REPLACE(ADGROUP_NAME, '\\s*\\([a-zA-Z0-9_-]+\\)\\s*$', '')) AS ADGROUP_NAME
+         , REGEXP_SUBSTR(ADGROUP_NAME, '\\(([a-zA-Z0-9_-]+)\\)$', 1, 1, 'e') AS ADGROUP_ID
          , CREATIVE_NAME
          , NULL AS TRACKER_NAME
          , NULL AS COUNTRY
