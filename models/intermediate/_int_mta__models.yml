@@ -29,13 +29,14 @@ models:
               config:
                 where: "INSTALL_TIMESTAMP >= DATEADD(day, -60, CURRENT_DATE)"
           - relationships:
-              to: ref('int_adjust_amplitude__device_mapping')
-              field: ADJUST_DEVICE_ID
+              arguments:
+                to: ref('int_adjust_amplitude__device_mapping')
+                field: ADJUST_DEVICE_ID
               config:
                 severity: warn
                 where: "INSTALL_TIMESTAMP >= DATEADD(day, -60, CURRENT_DATE)"
-              meta:
-                comment: "iOS IDFA match rate is structurally ~1.4% due to ATT limitation (DMAP-04). Android device mapping not yet fixed (Phase 3). Using severity warn to track metric without failing builds."
+                meta:
+                  comment: "iOS IDFA match rate is structurally ~1.4% due to ATT limitation (DMAP-04). Android device mapping not yet fixed (Phase 3). Using severity warn to track metric without failing builds."
       - name: PLATFORM
         description: iOS or Android
         data_tests:
@@ -43,7 +44,8 @@ models:
               config:
                 where: "INSTALL_TIMESTAMP >= DATEADD(day, -60, CURRENT_DATE)"
           - accepted_values:
-              values: ['iOS', 'Android']
+              arguments:
+                values: ['iOS', 'Android']
               config:
                 where: "INSTALL_TIMESTAMP >= DATEADD(day, -60, CURRENT_DATE)"
       - name: TOUCHPOINT_TYPE
@@ -92,7 +94,8 @@ models:
               config:
                 where: "INSTALL_TIMESTAMP >= DATEADD(day, -60, CURRENT_DATE)"
           - accepted_values:
-              values: ['iOS', 'Android']
+              arguments:
+                values: ['iOS', 'Android']
               config:
                 where: "INSTALL_TIMESTAMP >= DATEADD(day, -60, CURRENT_DATE)"
       - name: CREDIT_TIME_DECAY

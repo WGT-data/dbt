@@ -8,17 +8,18 @@ models:
     columns:
       - name: DATE
         description: Calendar date of spend
-        tests:
+        data_tests:
           - not_null
       - name: PLATFORM
         description: "iOS or Android"
-        tests:
+        data_tests:
           - not_null
           - accepted_values:
-              values: ['iOS', 'Android']
+              arguments:
+                values: ['iOS', 'Android']
       - name: CHANNEL
         description: "Standardized ad partner name (Meta, Google, TikTok, etc.)"
-        tests:
+        data_tests:
           - not_null
       - name: SPEND
         description: Total marketing cost for this date+platform+channel
@@ -28,12 +29,13 @@ models:
         description: Total ad clicks
       - name: PAID_INSTALLS
         description: Paid installs reported by Supermetrics
-    tests:
+    data_tests:
       - dbt_utils.unique_combination_of_columns:
-          combination_of_columns:
-            - DATE
-            - PLATFORM
-            - CHANNEL
+          arguments:
+            combination_of_columns:
+              - DATE
+              - PLATFORM
+              - CHANNEL
 
   - name: int_mmm__daily_channel_installs
     description: >
@@ -43,26 +45,28 @@ models:
     columns:
       - name: DATE
         description: Calendar date of install
-        tests:
+        data_tests:
           - not_null
       - name: PLATFORM
         description: "iOS or Android"
-        tests:
+        data_tests:
           - not_null
           - accepted_values:
-              values: ['iOS', 'Android']
+              arguments:
+                values: ['iOS', 'Android']
       - name: CHANNEL
         description: "Standardized ad partner name from AD_PARTNER mapping"
-        tests:
+        data_tests:
           - not_null
       - name: INSTALLS
         description: Count of distinct device IDs installed on this date
-    tests:
+    data_tests:
       - dbt_utils.unique_combination_of_columns:
-          combination_of_columns:
-            - DATE
-            - PLATFORM
-            - CHANNEL
+          arguments:
+            combination_of_columns:
+              - DATE
+              - PLATFORM
+              - CHANNEL
 
   - name: int_mmm__daily_channel_revenue
     description: >
@@ -73,17 +77,18 @@ models:
     columns:
       - name: DATE
         description: Calendar date of revenue events
-        tests:
+        data_tests:
           - not_null
       - name: PLATFORM
         description: "iOS or Android"
-        tests:
+        data_tests:
           - not_null
           - accepted_values:
-              values: ['iOS', 'Android']
+              arguments:
+                values: ['iOS', 'Android']
       - name: CHANNEL
         description: "Standardized ad partner name via network_mapping seed"
-        tests:
+        data_tests:
           - not_null
       - name: REVENUE
         description: "Adjust-reported revenue for this channel"
@@ -93,9 +98,10 @@ models:
         description: "Ad-based revenue (rewarded video, interstitials, etc.)"
       - name: API_INSTALLS
         description: "Install count from API (for cross-check with S3 installs)"
-    tests:
+    data_tests:
       - dbt_utils.unique_combination_of_columns:
-          combination_of_columns:
-            - DATE
-            - PLATFORM
-            - CHANNEL
+          arguments:
+            combination_of_columns:
+              - DATE
+              - PLATFORM
+              - CHANNEL

@@ -7,26 +7,28 @@ models:
       at the DATE + PLATFORM + CHANNEL grain. Uses a date spine to ensure
       complete time series with no gaps (critical for MMM regression models).
       Metrics are zero-filled for days without activity.
-    tests:
+    data_tests:
       - dbt_utils.unique_combination_of_columns:
-          combination_of_columns:
-            - DATE
-            - PLATFORM
-            - CHANNEL
+          arguments:
+            combination_of_columns:
+              - DATE
+              - PLATFORM
+              - CHANNEL
     columns:
       - name: DATE
         description: Calendar date
-        tests:
+        data_tests:
           - not_null
       - name: PLATFORM
         description: "iOS or Android"
-        tests:
+        data_tests:
           - not_null
           - accepted_values:
-              values: ['iOS', 'Android']
+              arguments:
+                values: ['iOS', 'Android']
       - name: CHANNEL
         description: "Standardized ad partner name (Meta, Google, TikTok, etc.)"
-        tests:
+        data_tests:
           - not_null
       - name: SPEND
         description: "Marketing spend (from Supermetrics), 0 if no spend"
@@ -50,26 +52,28 @@ models:
       Weekly rollup of daily channel summary for MMM tools that prefer
       weekly granularity. All metrics are summed, KPIs recomputed from
       weekly totals (not averaged). Includes data coverage indicators.
-    tests:
+    data_tests:
       - dbt_utils.unique_combination_of_columns:
-          combination_of_columns:
-            - WEEK_START_DATE
-            - PLATFORM
-            - CHANNEL
+          arguments:
+            combination_of_columns:
+              - WEEK_START_DATE
+              - PLATFORM
+              - CHANNEL
     columns:
       - name: WEEK_START_DATE
         description: "Monday of the week (DATE_TRUNC('week'))"
-        tests:
+        data_tests:
           - not_null
       - name: PLATFORM
         description: "iOS or Android"
-        tests:
+        data_tests:
           - not_null
           - accepted_values:
-              values: ['iOS', 'Android']
+              arguments:
+                values: ['iOS', 'Android']
       - name: CHANNEL
         description: "Standardized ad partner name"
-        tests:
+        data_tests:
           - not_null
       - name: SPEND
         description: "Weekly total marketing spend"

@@ -220,7 +220,7 @@ WITH partner_map AS (
         , COALESCE(c.D7_MATURED_USERS, 0) AS D7_MATURED_USERS
         , COALESCE(c.D30_MATURED_USERS, 0) AS D30_MATURED_USERS
 
-        -- SKAN installs (clean 1:1 join — no country fan-out)
+        -- SKAN installs (iOS only — SKAN is an iOS-specific framework)
         , COALESCE(sk.NEW_INSTALL_COUNT, 0) AS SKAN_INSTALLS
 
     FROM spend_data s
@@ -233,6 +233,7 @@ WITH partner_map AS (
         ON COALESCE(s.DATE, c.DATE) = sk.INSTALL_DATE
         AND LOWER(COALESCE(s.AD_PARTNER, c.AD_PARTNER)) = LOWER(sk.AD_PARTNER)
         AND LOWER(COALESCE(s.CAMPAIGN_NAME, c.CAMPAIGN_NAME)) = LOWER(sk.CAMPAIGN_NAME)
+        AND LOWER(COALESCE(s.PLATFORM, c.PLATFORM)) = 'ios'
 )
 
 SELECT

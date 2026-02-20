@@ -9,9 +9,10 @@ models:
       Grain: One row per user_id/platform combination
     data_tests:
       - dbt_utils.unique_combination_of_columns:
-          combination_of_columns:
-            - USER_ID
-            - PLATFORM
+          arguments:
+            combination_of_columns:
+              - USER_ID
+              - PLATFORM
           config:
             where: "INSTALL_TIME >= DATEADD(day, -60, CURRENT_DATE)"
     columns:
@@ -28,7 +29,8 @@ models:
               config:
                 where: "INSTALL_TIME >= DATEADD(day, -60, CURRENT_DATE)"
           - accepted_values:
-              values: ['iOS', 'Android']
+              arguments:
+                values: ['iOS', 'Android']
               config:
                 where: "INSTALL_TIME >= DATEADD(day, -60, CURRENT_DATE)"
       - name: ADJUST_DEVICE_ID
@@ -52,9 +54,10 @@ models:
       Grain: One row per user_id/platform combination
     data_tests:
       - dbt_utils.unique_combination_of_columns:
-          combination_of_columns:
-            - USER_ID
-            - PLATFORM
+          arguments:
+            combination_of_columns:
+              - USER_ID
+              - PLATFORM
           config:
             where: "INSTALL_TIME >= DATEADD(day, -60, CURRENT_DATE)"
     columns:
@@ -71,7 +74,8 @@ models:
               config:
                 where: "INSTALL_TIME >= DATEADD(day, -60, CURRENT_DATE)"
           - accepted_values:
-              values: ['iOS', 'Android']
+              arguments:
+                values: ['iOS', 'Android']
               config:
                 where: "INSTALL_TIME >= DATEADD(day, -60, CURRENT_DATE)"
       - name: INSTALL_DATE
