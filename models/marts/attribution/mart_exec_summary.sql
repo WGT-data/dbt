@@ -30,11 +30,12 @@
     tags=['mart', 'performance', 'executive']
 ) }}
 
--- Country name → ISO 2-letter code mapping for spend data (which uses full names)
+-- Country code ↔ name mapping (used for both spend name→code and final code→name)
 WITH country_code_map AS (
     SELECT code, name FROM (VALUES
         ('us', 'United States'),
         ('gb', 'United Kingdom'),
+        ('uk', 'United Kingdom'),
         ('ca', 'Canada'),
         ('au', 'Australia'),
         ('nz', 'New Zealand'),
@@ -82,7 +83,85 @@ WITH country_code_map AS (
         ('sa', 'Saudi Arabia'),
         ('eg', 'Egypt'),
         ('ng', 'Nigeria'),
-        ('ke', 'Kenya')
+        ('ke', 'Kenya'),
+        ('tr', 'Turkey'),
+        ('ua', 'Ukraine'),
+        ('cl', 'Chile'),
+        ('pe', 'Peru'),
+        ('ec', 'Ecuador'),
+        ('cr', 'Costa Rica'),
+        ('pa', 'Panama'),
+        ('gt', 'Guatemala'),
+        ('sv', 'El Salvador'),
+        ('hn', 'Honduras'),
+        ('ni', 'Nicaragua'),
+        ('bo', 'Bolivia'),
+        ('py', 'Paraguay'),
+        ('uy', 'Uruguay'),
+        ('ve', 'Venezuela'),
+        ('tt', 'Trinidad and Tobago'),
+        ('jm', 'Jamaica'),
+        ('tz', 'Tanzania'),
+        ('ug', 'Uganda'),
+        ('gh', 'Ghana'),
+        ('et', 'Ethiopia'),
+        ('np', 'Nepal'),
+        ('lk', 'Sri Lanka'),
+        ('pk', 'Pakistan'),
+        ('bd', 'Bangladesh'),
+        ('kh', 'Cambodia'),
+        ('mm', 'Myanmar'),
+        ('la', 'Laos'),
+        ('hr', 'Croatia'),
+        ('rs', 'Serbia'),
+        ('bg', 'Bulgaria'),
+        ('si', 'Slovenia'),
+        ('sk', 'Slovakia'),
+        ('lt', 'Lithuania'),
+        ('lv', 'Latvia'),
+        ('ee', 'Estonia'),
+        ('cy', 'Cyprus'),
+        ('mt', 'Malta'),
+        ('lu', 'Luxembourg'),
+        ('is', 'Iceland'),
+        ('ba', 'Bosnia and Herzegovina'),
+        ('mk', 'North Macedonia'),
+        ('al', 'Albania'),
+        ('me', 'Montenegro'),
+        ('md', 'Moldova'),
+        ('ge', 'Georgia'),
+        ('am', 'Armenia'),
+        ('az', 'Azerbaijan'),
+        ('kz', 'Kazakhstan'),
+        ('uz', 'Uzbekistan'),
+        ('qa', 'Qatar'),
+        ('kw', 'Kuwait'),
+        ('bh', 'Bahrain'),
+        ('om', 'Oman'),
+        ('jo', 'Jordan'),
+        ('lb', 'Lebanon'),
+        ('iq', 'Iraq'),
+        ('ma', 'Morocco'),
+        ('tn', 'Tunisia'),
+        ('dz', 'Algeria'),
+        ('ly', 'Libya'),
+        ('mo', 'Macau'),
+        ('mn', 'Mongolia'),
+        ('fj', 'Fiji'),
+        ('pg', 'Papua New Guinea'),
+        ('rw', 'Rwanda'),
+        ('cm', 'Cameroon'),
+        ('sn', 'Senegal'),
+        ('ci', 'Ivory Coast'),
+        ('mg', 'Madagascar'),
+        ('mz', 'Mozambique'),
+        ('zm', 'Zambia'),
+        ('zw', 'Zimbabwe'),
+        ('bw', 'Botswana'),
+        ('na', 'Namibia'),
+        ('mu', 'Mauritius'),
+        ('mw', 'Malawi'),
+        ('unknown', 'Unknown')
     ) AS t(code, name)
 )
 
@@ -408,141 +487,142 @@ WITH country_code_map AS (
 )
 
 SELECT
-    DATE
-    , AD_PARTNER
+    ws.DATE
+    , ws.AD_PARTNER
     , CASE
-        WHEN AD_PARTNER IN ('Meta', 'Google', 'Apple', 'AppLovin', 'Moloco', 'Unity', 'TikTok', 'Smadex') THEN AD_PARTNER
-        WHEN AD_PARTNER = 'Organic' THEN 'Organic'
-        WHEN AD_PARTNER = 'Unattributed' THEN 'Unattributed'
-        WHEN AD_PARTNER LIKE '%Vungle%' THEN 'Vungle'
-        WHEN AD_PARTNER LIKE '%Liftoff%' OR AD_PARTNER LIKE '%liftoff%' THEN 'Liftoff'
-        WHEN AD_PARTNER LIKE '%Chartboost%' OR AD_PARTNER LIKE '%chartboost%' THEN 'Chartboost'
-        WHEN AD_PARTNER LIKE '%AdColony%' OR AD_PARTNER LIKE '%adcolony%' THEN 'AdColony'
-        WHEN AD_PARTNER LIKE '%AdAction%' THEN 'AdAction'
-        WHEN AD_PARTNER LIKE '%ironSource%' THEN 'ironSource'
-        WHEN AD_PARTNER LIKE '%Cross%Install%' OR AD_PARTNER LIKE '%cross%install%' THEN 'Cross-Install'
-        WHEN AD_PARTNER LIKE '%Tapjoy%' THEN 'Tapjoy'
-        WHEN AD_PARTNER LIKE '%Topgolf%' THEN 'Topgolf (Internal)'
-        WHEN AD_PARTNER LIKE '%applift%' OR AD_PARTNER LIKE '%Applift%' OR AD_PARTNER LIKE '%AppLift%' THEN 'AppLift'
-        WHEN AD_PARTNER LIKE '%Google%' THEN 'Google'
-        WHEN AD_PARTNER LIKE 'Untrusted%' THEN 'Untrusted Devices'
-        WHEN AD_PARTNER IS NULL THEN 'Unknown'
+        WHEN ws.AD_PARTNER IN ('Meta', 'Google', 'Apple', 'AppLovin', 'Moloco', 'Unity', 'TikTok', 'Smadex') THEN ws.AD_PARTNER
+        WHEN ws.AD_PARTNER = 'Organic' THEN 'Organic'
+        WHEN ws.AD_PARTNER = 'Unattributed' THEN 'Unattributed'
+        WHEN ws.AD_PARTNER LIKE '%Vungle%' THEN 'Vungle'
+        WHEN ws.AD_PARTNER LIKE '%Liftoff%' OR ws.AD_PARTNER LIKE '%liftoff%' THEN 'Liftoff'
+        WHEN ws.AD_PARTNER LIKE '%Chartboost%' OR ws.AD_PARTNER LIKE '%chartboost%' THEN 'Chartboost'
+        WHEN ws.AD_PARTNER LIKE '%AdColony%' OR ws.AD_PARTNER LIKE '%adcolony%' THEN 'AdColony'
+        WHEN ws.AD_PARTNER LIKE '%AdAction%' THEN 'AdAction'
+        WHEN ws.AD_PARTNER LIKE '%ironSource%' THEN 'ironSource'
+        WHEN ws.AD_PARTNER LIKE '%Cross%Install%' OR ws.AD_PARTNER LIKE '%cross%install%' THEN 'Cross-Install'
+        WHEN ws.AD_PARTNER LIKE '%Tapjoy%' THEN 'Tapjoy'
+        WHEN ws.AD_PARTNER LIKE '%Topgolf%' THEN 'Topgolf (Internal)'
+        WHEN ws.AD_PARTNER LIKE '%applift%' OR ws.AD_PARTNER LIKE '%Applift%' OR ws.AD_PARTNER LIKE '%AppLift%' THEN 'AppLift'
+        WHEN ws.AD_PARTNER LIKE '%Google%' THEN 'Google'
+        WHEN ws.AD_PARTNER LIKE 'Untrusted%' THEN 'Untrusted Devices'
+        WHEN ws.AD_PARTNER IS NULL THEN 'Unknown'
         ELSE 'Other'
       END AS AD_PARTNER_GROUPED
-    , COALESCE(NETWORK_NAME, '__none__') AS NETWORK_NAME
-    , COALESCE(CAMPAIGN_NAME, '__none__') AS CAMPAIGN_NAME
-    , COALESCE(CAMPAIGN_ID, '__none__') AS CAMPAIGN_ID
-    , PLATFORM
-    , COALESCE(COUNTRY, '__none__') AS COUNTRY
+    , COALESCE(ws.NETWORK_NAME, '__none__') AS NETWORK_NAME
+    , COALESCE(ws.CAMPAIGN_NAME, '__none__') AS CAMPAIGN_NAME
+    , COALESCE(ws.CAMPAIGN_ID, '__none__') AS CAMPAIGN_ID
+    , ws.PLATFORM
+    , COALESCE(cn.name, UPPER(ws.COUNTRY), '__none__') AS COUNTRY
 
     -- Core spend metrics
-    , COST
-    , CLICKS
-    , IMPRESSIONS
+    , ws.COST
+    , ws.CLICKS
+    , ws.IMPRESSIONS
 
     -- Install metrics
-    , ADJUST_INSTALLS
-    , SKAN_INSTALLS
-    , ADJUST_INSTALLS + SKAN_INSTALLS AS TOTAL_INSTALLS
-    , ATTRIBUTION_INSTALLS
+    , ws.ADJUST_INSTALLS
+    , ws.SKAN_INSTALLS
+    , ws.ADJUST_INSTALLS + ws.SKAN_INSTALLS AS TOTAL_INSTALLS
+    , ws.ATTRIBUTION_INSTALLS
 
     -- Efficiency metrics (denominator = Adjust Installs for spend-side KPIs)
-    , CASE WHEN ADJUST_INSTALLS > 0
-        THEN COST / ADJUST_INSTALLS
+    , CASE WHEN ws.ADJUST_INSTALLS > 0
+        THEN ws.COST / ws.ADJUST_INSTALLS
         ELSE NULL END AS CPI
 
-    , CASE WHEN IMPRESSIONS > 0
-        THEN (COST / IMPRESSIONS) * 1000
+    , CASE WHEN ws.IMPRESSIONS > 0
+        THEN (ws.COST / ws.IMPRESSIONS) * 1000
         ELSE NULL END AS CPM
 
-    , CASE WHEN IMPRESSIONS > 0
-        THEN CLICKS / IMPRESSIONS
+    , CASE WHEN ws.IMPRESSIONS > 0
+        THEN ws.CLICKS / ws.IMPRESSIONS
         ELSE NULL END AS CTR
 
-    , CASE WHEN CLICKS > 0
-        THEN ADJUST_INSTALLS::FLOAT / CLICKS
+    , CASE WHEN ws.CLICKS > 0
+        THEN ws.ADJUST_INSTALLS::FLOAT / ws.CLICKS
         ELSE NULL END AS CVR
 
-    , CASE WHEN IMPRESSIONS > 0
-        THEN (ADJUST_INSTALLS::FLOAT / IMPRESSIONS) * 1000
+    , CASE WHEN ws.IMPRESSIONS > 0
+        THEN (ws.ADJUST_INSTALLS::FLOAT / ws.IMPRESSIONS) * 1000
         ELSE NULL END AS IPM
 
     -- Total Revenue (Purchase + Ad)
-    , TOTAL_REVENUE
-    , D7_REVENUE
-    , D30_REVENUE
+    , ws.TOTAL_REVENUE
+    , ws.D7_REVENUE
+    , ws.D30_REVENUE
 
     -- Purchase Revenue (IAP)
-    , TOTAL_PURCHASE_REVENUE
-    , D7_PURCHASE_REVENUE
-    , D30_PURCHASE_REVENUE
+    , ws.TOTAL_PURCHASE_REVENUE
+    , ws.D7_PURCHASE_REVENUE
+    , ws.D30_PURCHASE_REVENUE
 
     -- Ad Revenue
-    , TOTAL_AD_REVENUE
-    , D7_AD_REVENUE
-    , D30_AD_REVENUE
+    , ws.TOTAL_AD_REVENUE
+    , ws.D7_AD_REVENUE
+    , ws.D30_AD_REVENUE
 
     -- ROAS (based on total revenue)
-    , CASE WHEN COST > 0 THEN TOTAL_REVENUE / COST ELSE NULL END AS TOTAL_ROAS
-    , CASE WHEN COST > 0 THEN D7_REVENUE / COST ELSE NULL END AS D7_ROAS
-    , CASE WHEN COST > 0 THEN D30_REVENUE / COST ELSE NULL END AS D30_ROAS
+    , CASE WHEN ws.COST > 0 THEN ws.TOTAL_REVENUE / ws.COST ELSE NULL END AS TOTAL_ROAS
+    , CASE WHEN ws.COST > 0 THEN ws.D7_REVENUE / ws.COST ELSE NULL END AS D7_ROAS
+    , CASE WHEN ws.COST > 0 THEN ws.D30_REVENUE / ws.COST ELSE NULL END AS D30_ROAS
 
     -- ARPI (Average Revenue Per Install — uses Adjust Installs)
-    , CASE WHEN ADJUST_INSTALLS > 0
-        THEN TOTAL_REVENUE / ADJUST_INSTALLS
+    , CASE WHEN ws.ADJUST_INSTALLS > 0
+        THEN ws.TOTAL_REVENUE / ws.ADJUST_INSTALLS
         ELSE NULL END AS ARPI
-    , CASE WHEN ADJUST_INSTALLS > 0
-        THEN D7_REVENUE / ADJUST_INSTALLS
+    , CASE WHEN ws.ADJUST_INSTALLS > 0
+        THEN ws.D7_REVENUE / ws.ADJUST_INSTALLS
         ELSE NULL END AS D7_ARPI
-    , CASE WHEN ADJUST_INSTALLS > 0
-        THEN D30_REVENUE / ADJUST_INSTALLS
+    , CASE WHEN ws.ADJUST_INSTALLS > 0
+        THEN ws.D30_REVENUE / ws.ADJUST_INSTALLS
         ELSE NULL END AS D30_ARPI
 
     -- Paying users
-    , TOTAL_PAYING_USERS
-    , D7_PAYING_USERS
-    , D30_PAYING_USERS
+    , ws.TOTAL_PAYING_USERS
+    , ws.D7_PAYING_USERS
+    , ws.D30_PAYING_USERS
 
     -- ARPPU (Average Revenue Per Paying User)
-    , CASE WHEN TOTAL_PAYING_USERS > 0
-        THEN TOTAL_REVENUE / TOTAL_PAYING_USERS
+    , CASE WHEN ws.TOTAL_PAYING_USERS > 0
+        THEN ws.TOTAL_REVENUE / ws.TOTAL_PAYING_USERS
         ELSE NULL END AS ARPPU
-    , CASE WHEN D7_PAYING_USERS > 0
-        THEN D7_REVENUE / D7_PAYING_USERS
+    , CASE WHEN ws.D7_PAYING_USERS > 0
+        THEN ws.D7_REVENUE / ws.D7_PAYING_USERS
         ELSE NULL END AS D7_ARPPU
-    , CASE WHEN D30_PAYING_USERS > 0
-        THEN D30_REVENUE / D30_PAYING_USERS
+    , CASE WHEN ws.D30_PAYING_USERS > 0
+        THEN ws.D30_REVENUE / ws.D30_PAYING_USERS
         ELSE NULL END AS D30_ARPPU
 
     -- Cost Per Paying User
-    , CASE WHEN TOTAL_PAYING_USERS > 0
-        THEN COST / TOTAL_PAYING_USERS
+    , CASE WHEN ws.TOTAL_PAYING_USERS > 0
+        THEN ws.COST / ws.TOTAL_PAYING_USERS
         ELSE NULL END AS COST_PER_PAYING_USER
-    , CASE WHEN D7_PAYING_USERS > 0
-        THEN COST / D7_PAYING_USERS
+    , CASE WHEN ws.D7_PAYING_USERS > 0
+        THEN ws.COST / ws.D7_PAYING_USERS
         ELSE NULL END AS D7_COST_PER_PAYING_USER
-    , CASE WHEN D30_PAYING_USERS > 0
-        THEN COST / D30_PAYING_USERS
+    , CASE WHEN ws.D30_PAYING_USERS > 0
+        THEN ws.COST / ws.D30_PAYING_USERS
         ELSE NULL END AS D30_COST_PER_PAYING_USER
 
     -- Retention raw counts
-    , D1_RETAINED_USERS
-    , D7_RETAINED_USERS
-    , D30_RETAINED_USERS
-    , D1_MATURED_USERS
-    , D7_MATURED_USERS
-    , D30_MATURED_USERS
+    , ws.D1_RETAINED_USERS
+    , ws.D7_RETAINED_USERS
+    , ws.D30_RETAINED_USERS
+    , ws.D1_MATURED_USERS
+    , ws.D7_MATURED_USERS
+    , ws.D30_MATURED_USERS
 
     -- Retention rates
-    , CASE WHEN D1_MATURED_USERS > 0
-        THEN D1_RETAINED_USERS::FLOAT / D1_MATURED_USERS
+    , CASE WHEN ws.D1_MATURED_USERS > 0
+        THEN ws.D1_RETAINED_USERS::FLOAT / ws.D1_MATURED_USERS
         ELSE NULL END AS D1_RETENTION
-    , CASE WHEN D7_MATURED_USERS > 0
-        THEN D7_RETAINED_USERS::FLOAT / D7_MATURED_USERS
+    , CASE WHEN ws.D7_MATURED_USERS > 0
+        THEN ws.D7_RETAINED_USERS::FLOAT / ws.D7_MATURED_USERS
         ELSE NULL END AS D7_RETENTION
-    , CASE WHEN D30_MATURED_USERS > 0
-        THEN D30_RETAINED_USERS::FLOAT / D30_MATURED_USERS
+    , CASE WHEN ws.D30_MATURED_USERS > 0
+        THEN ws.D30_RETAINED_USERS::FLOAT / ws.D30_MATURED_USERS
         ELSE NULL END AS D30_RETENTION
 
-FROM with_skan
-WHERE DATE IS NOT NULL
+FROM with_skan ws
+LEFT JOIN country_code_map cn ON ws.COUNTRY = cn.code
+WHERE ws.DATE IS NOT NULL
