@@ -19,6 +19,7 @@ SELECT
     , CAMPAIGN_NAME
     , CAMPAIGN_ID
     , PLATFORM
+    , COUNTRY
 
     -- Spend metrics (additive)
     , COST
