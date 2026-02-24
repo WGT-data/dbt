@@ -21,6 +21,12 @@ SELECT
     , PLATFORM
     , COUNTRY
 
+    -- Date grains (for granularity selector)
+    , WEEK_START
+    , MONTH_START
+    , QUARTER_START
+    , YEAR_START
+
     -- Spend metrics (additive)
     , COST
     , CLICKS

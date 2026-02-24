@@ -514,6 +514,12 @@ SELECT
     , ws.PLATFORM
     , COALESCE(cn.name, UPPER(ws.COUNTRY), '__none__') AS COUNTRY
 
+    -- Date grain columns (for Power BI granularity selector)
+    , DATE_TRUNC('week', ws.DATE)::DATE AS WEEK_START
+    , DATE_TRUNC('month', ws.DATE)::DATE AS MONTH_START
+    , DATE_TRUNC('quarter', ws.DATE)::DATE AS QUARTER_START
+    , DATE_TRUNC('year', ws.DATE)::DATE AS YEAR_START
+
     -- Core spend metrics
     , ws.COST
     , ws.CLICKS
