@@ -24,16 +24,14 @@ models:
 
       -- INSTALL METRICS --
       Adjust Installs      = SUM(mart_exec_summary[ADJUST_INSTALLS])
-      SKAN Installs        = SUM(mart_exec_summary[SKAN_INSTALLS])
-      Total Installs       = SUM(mart_exec_summary[TOTAL_INSTALLS])
       Attribution Installs = SUM(mart_exec_summary[ATTRIBUTION_INSTALLS])
 
       -- EFFICIENCY METRICS --
-      CPI = DIVIDE([Total Cost], [Adjust Installs], BLANK())
+      CPI = DIVIDE([Total Cost], [Attribution Installs], BLANK())
       CPM = DIVIDE([Total Cost], [Total Impressions], BLANK()) * 1000
       CTR = DIVIDE([Total Clicks], [Total Impressions], BLANK())
-      CVR = DIVIDE([Adjust Installs], [Total Clicks], BLANK())
-      IPM = DIVIDE([Adjust Installs], [Total Impressions], BLANK()) * 1000
+      CVR = DIVIDE([Attribution Installs], [Total Clicks], BLANK())
+      IPM = DIVIDE([Attribution Installs], [Total Impressions], BLANK()) * 1000
 
       -- TOTAL REVENUE --
       Total Revenue    = SUM(mart_exec_summary[TOTAL_REVENUE])
@@ -56,9 +54,9 @@ models:
       D30 ROAS   = DIVIDE([D30 Revenue], [Total Cost], BLANK())
 
       -- ARPI (Average Revenue Per Install) --
-      ARPI     = DIVIDE([Total Revenue], [Adjust Installs], BLANK())
-      D7 ARPI  = DIVIDE([D7 Revenue], [Adjust Installs], BLANK())
-      D30 ARPI = DIVIDE([D30 Revenue], [Adjust Installs], BLANK())
+      ARPI     = DIVIDE([Total Revenue], [Attribution Installs], BLANK())
+      D7 ARPI  = DIVIDE([D7 Revenue], [Attribution Installs], BLANK())
+      D30 ARPI = DIVIDE([D30 Revenue], [Attribution Installs], BLANK())
 
       -- PAYING USERS --
       Total Paying Users = SUM(mart_exec_summary[TOTAL_PAYING_USERS])
@@ -88,9 +86,9 @@ models:
       D30 Retention = DIVIDE([D30 Retained Users], [D30 Matured Users], BLANK())
 
       -- CONVERSION RATE (Payer %) --
-      Payer Rate     = DIVIDE([Total Paying Users], [Adjust Installs], BLANK())
-      D7 Payer Rate  = DIVIDE([D7 Paying Users], [Adjust Installs], BLANK())
-      D30 Payer Rate = DIVIDE([D30 Paying Users], [Adjust Installs], BLANK())
+      Payer Rate     = DIVIDE([Total Paying Users], [Attribution Installs], BLANK())
+      D7 Payer Rate  = DIVIDE([D7 Paying Users], [Attribution Installs], BLANK())
+      D30 Payer Rate = DIVIDE([D30 Paying Users], [Attribution Installs], BLANK())
 
     columns:
       - name: MEASURE_ID
