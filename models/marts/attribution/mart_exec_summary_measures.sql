@@ -38,14 +38,16 @@ SELECT
     , TOTAL_INSTALLS
     , ATTRIBUTION_INSTALLS
 
-    -- Revenue (additive)
+    -- Revenue from Adjust API (event-date, additive)
     , TOTAL_REVENUE
+    , TOTAL_PURCHASE_REVENUE
+    , TOTAL_AD_REVENUE
+
+    -- Cohort revenue (install-date D7/D30, additive)
     , D7_REVENUE
     , D30_REVENUE
-    , TOTAL_PURCHASE_REVENUE
     , D7_PURCHASE_REVENUE
     , D30_PURCHASE_REVENUE
-    , TOTAL_AD_REVENUE
     , D7_AD_REVENUE
     , D30_AD_REVENUE
 

@@ -35,7 +35,6 @@ WITH country_code_map AS (
     SELECT code, name FROM (VALUES
         ('us', 'United States'),
         ('gb', 'United Kingdom'),
-        ('uk', 'United Kingdom'),
         ('ca', 'Canada'),
         ('au', 'Australia'),
         ('nz', 'New Zealand'),
@@ -194,6 +193,9 @@ WITH country_code_map AS (
          , SUM(s.CLICKS) AS CLICKS
          , SUM(s.IMPRESSIONS) AS IMPRESSIONS
          , SUM(s.INSTALLS) AS ADJUST_INSTALLS
+         , SUM(s.ALL_REVENUE) AS ADJUST_TOTAL_REVENUE
+         , SUM(s.REVENUE) AS ADJUST_PURCHASE_REVENUE
+         , SUM(s.AD_REVENUE) AS ADJUST_AD_REVENUE
     FROM {{ ref('stg_adjust__report_daily') }} s
     LEFT JOIN partner_map pm ON s.PARTNER_NAME = pm.PARTNER_NAME
     LEFT JOIN country_code_map ccm ON LOWER(s.COUNTRY) = LOWER(ccm.name)
@@ -264,6 +266,7 @@ WITH country_code_map AS (
         , CAMPAIGN_NAME
         , INSTALL_DATE
         , LOWER(
+            REPLACE(
             CASE
                 -- Pattern: ...iOS_US_... or ...Android_US_... or ...IOS-US-...
                 WHEN REGEXP_SUBSTR(UPPER(CAMPAIGN_NAME), '(IOS|ANDROID)[_-]([A-Z]{2})[_+-]', 1, 1, 'e', 2)
@@ -304,6 +307,7 @@ WITH country_code_map AS (
 
                 ELSE 'unknown'
             END
+            , 'UK', 'GB')  -- normalize UK → GB (ISO standard)
           ) AS INFERRED_COUNTRY
         , SUM(NEW_INSTALL_COUNT) AS NEW_INSTALL_COUNT
     FROM {{ ref('int_skan__aggregate_attribution') }}
@@ -381,18 +385,16 @@ WITH country_code_map AS (
         -- Cohort metrics
         , COALESCE(c.ATTRIBUTION_INSTALLS, 0) AS ATTRIBUTION_INSTALLS
 
-        -- Total Revenue
-        , COALESCE(c.TOTAL_REVENUE, 0) AS TOTAL_REVENUE
+        -- Revenue from Adjust API (event-date based, more complete)
+        , COALESCE(s.ADJUST_TOTAL_REVENUE, 0) AS TOTAL_REVENUE
+        , COALESCE(s.ADJUST_PURCHASE_REVENUE, 0) AS TOTAL_PURCHASE_REVENUE
+        , COALESCE(s.ADJUST_AD_REVENUE, 0) AS TOTAL_AD_REVENUE
+
+        -- Cohort revenue (install-date based, D7/D30 windows)
         , COALESCE(c.D7_REVENUE, 0) AS D7_REVENUE
         , COALESCE(c.D30_REVENUE, 0) AS D30_REVENUE
-
-        -- Purchase Revenue
-        , COALESCE(c.TOTAL_PURCHASE_REVENUE, 0) AS TOTAL_PURCHASE_REVENUE
         , COALESCE(c.D7_PURCHASE_REVENUE, 0) AS D7_PURCHASE_REVENUE
         , COALESCE(c.D30_PURCHASE_REVENUE, 0) AS D30_PURCHASE_REVENUE
-
-        -- Ad Revenue
-        , COALESCE(c.TOTAL_AD_REVENUE, 0) AS TOTAL_AD_REVENUE
         , COALESCE(c.D7_AD_REVENUE, 0) AS D7_AD_REVENUE
         , COALESCE(c.D30_AD_REVENUE, 0) AS D30_AD_REVENUE
 
@@ -446,18 +448,16 @@ WITH country_code_map AS (
         -- Cohort metrics
         , COALESCE(cb.ATTRIBUTION_INSTALLS, 0) AS ATTRIBUTION_INSTALLS
 
-        -- Total Revenue
+        -- Revenue from Adjust API (event-date based)
         , COALESCE(cb.TOTAL_REVENUE, 0) AS TOTAL_REVENUE
+        , COALESCE(cb.TOTAL_PURCHASE_REVENUE, 0) AS TOTAL_PURCHASE_REVENUE
+        , COALESCE(cb.TOTAL_AD_REVENUE, 0) AS TOTAL_AD_REVENUE
+
+        -- Cohort revenue (D7/D30 windows)
         , COALESCE(cb.D7_REVENUE, 0) AS D7_REVENUE
         , COALESCE(cb.D30_REVENUE, 0) AS D30_REVENUE
-
-        -- Purchase Revenue
-        , COALESCE(cb.TOTAL_PURCHASE_REVENUE, 0) AS TOTAL_PURCHASE_REVENUE
         , COALESCE(cb.D7_PURCHASE_REVENUE, 0) AS D7_PURCHASE_REVENUE
         , COALESCE(cb.D30_PURCHASE_REVENUE, 0) AS D30_PURCHASE_REVENUE
-
-        -- Ad Revenue
-        , COALESCE(cb.TOTAL_AD_REVENUE, 0) AS TOTAL_AD_REVENUE
         , COALESCE(cb.D7_AD_REVENUE, 0) AS D7_AD_REVENUE
         , COALESCE(cb.D30_AD_REVENUE, 0) AS D30_AD_REVENUE
 
@@ -531,9 +531,9 @@ SELECT
     , ws.ADJUST_INSTALLS + ws.SKAN_INSTALLS AS TOTAL_INSTALLS
     , ws.ATTRIBUTION_INSTALLS
 
-    -- Efficiency metrics (denominator = Adjust Installs for spend-side KPIs)
-    , CASE WHEN ws.ADJUST_INSTALLS > 0
-        THEN ws.COST / ws.ADJUST_INSTALLS
+    -- Efficiency metrics (denominator = Adjust + SKAN Installs)
+    , CASE WHEN (ws.ADJUST_INSTALLS + ws.SKAN_INSTALLS) > 0
+        THEN ws.COST / (ws.ADJUST_INSTALLS + ws.SKAN_INSTALLS)
         ELSE NULL END AS CPI
 
     , CASE WHEN ws.IMPRESSIONS > 0
@@ -545,25 +545,23 @@ SELECT
         ELSE NULL END AS CTR
 
     , CASE WHEN ws.CLICKS > 0
-        THEN ws.ADJUST_INSTALLS::FLOAT / ws.CLICKS
+        THEN (ws.ADJUST_INSTALLS + ws.SKAN_INSTALLS)::FLOAT / ws.CLICKS
         ELSE NULL END AS CVR
 
     , CASE WHEN ws.IMPRESSIONS > 0
-        THEN (ws.ADJUST_INSTALLS::FLOAT / ws.IMPRESSIONS) * 1000
+        THEN ((ws.ADJUST_INSTALLS + ws.SKAN_INSTALLS)::FLOAT / ws.IMPRESSIONS) * 1000
         ELSE NULL END AS IPM
 
-    -- Total Revenue (Purchase + Ad)
+    -- Revenue from Adjust API (event-date based, more complete coverage)
     , ws.TOTAL_REVENUE
+    , ws.TOTAL_PURCHASE_REVENUE
+    , ws.TOTAL_AD_REVENUE
+
+    -- Cohort revenue (install-date based D7/D30 windows, device-matched only)
     , ws.D7_REVENUE
     , ws.D30_REVENUE
-
-    -- Purchase Revenue (IAP)
-    , ws.TOTAL_PURCHASE_REVENUE
     , ws.D7_PURCHASE_REVENUE
     , ws.D30_PURCHASE_REVENUE
-
-    -- Ad Revenue
-    , ws.TOTAL_AD_REVENUE
     , ws.D7_AD_REVENUE
     , ws.D30_AD_REVENUE
 
@@ -572,15 +570,15 @@ SELECT
     , CASE WHEN ws.COST > 0 THEN ws.D7_REVENUE / ws.COST ELSE NULL END AS D7_ROAS
     , CASE WHEN ws.COST > 0 THEN ws.D30_REVENUE / ws.COST ELSE NULL END AS D30_ROAS
 
-    -- ARPI (Average Revenue Per Install — uses Adjust Installs)
-    , CASE WHEN ws.ADJUST_INSTALLS > 0
-        THEN ws.TOTAL_REVENUE / ws.ADJUST_INSTALLS
+    -- ARPI (Average Revenue Per Install — uses Adjust + SKAN Installs)
+    , CASE WHEN (ws.ADJUST_INSTALLS + ws.SKAN_INSTALLS) > 0
+        THEN ws.TOTAL_REVENUE / (ws.ADJUST_INSTALLS + ws.SKAN_INSTALLS)
         ELSE NULL END AS ARPI
-    , CASE WHEN ws.ADJUST_INSTALLS > 0
-        THEN ws.D7_REVENUE / ws.ADJUST_INSTALLS
+    , CASE WHEN (ws.ADJUST_INSTALLS + ws.SKAN_INSTALLS) > 0
+        THEN ws.D7_REVENUE / (ws.ADJUST_INSTALLS + ws.SKAN_INSTALLS)
         ELSE NULL END AS D7_ARPI
-    , CASE WHEN ws.ADJUST_INSTALLS > 0
-        THEN ws.D30_REVENUE / ws.ADJUST_INSTALLS
+    , CASE WHEN (ws.ADJUST_INSTALLS + ws.SKAN_INSTALLS) > 0
+        THEN ws.D30_REVENUE / (ws.ADJUST_INSTALLS + ws.SKAN_INSTALLS)
         ELSE NULL END AS D30_ARPI
 
     -- Paying users
