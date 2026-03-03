@@ -195,7 +195,6 @@ WITH country_code_map AS (
          , SUM(s.INSTALLS) AS ADJUST_INSTALLS
          , SUM(s.ALL_REVENUE) AS ADJUST_TOTAL_REVENUE
          , SUM(s.REVENUE) AS ADJUST_PURCHASE_REVENUE
-         , SUM(s.AD_REVENUE) AS ADJUST_AD_REVENUE
     FROM {{ ref('stg_adjust__report_daily') }} s
     LEFT JOIN partner_map pm ON s.PARTNER_NAME = pm.PARTNER_NAME
     LEFT JOIN country_code_map ccm ON LOWER(s.COUNTRY) = LOWER(ccm.name)
@@ -388,9 +387,9 @@ WITH country_code_map AS (
         -- Revenue from Adjust API (event-date based, more complete)
         , COALESCE(s.ADJUST_TOTAL_REVENUE, 0) AS TOTAL_REVENUE
         , COALESCE(s.ADJUST_PURCHASE_REVENUE, 0) AS TOTAL_PURCHASE_REVENUE
-        , COALESCE(s.ADJUST_AD_REVENUE, 0) AS TOTAL_AD_REVENUE
 
-        -- Cohort revenue (install-date based, D7/D30 windows)
+        -- Cohort revenue (install-date based, D7/D30 windows + lifetime ad revenue)
+        , COALESCE(c.TOTAL_AD_REVENUE, 0) AS TOTAL_AD_REVENUE
         , COALESCE(c.D7_REVENUE, 0) AS D7_REVENUE
         , COALESCE(c.D30_REVENUE, 0) AS D30_REVENUE
         , COALESCE(c.D7_PURCHASE_REVENUE, 0) AS D7_PURCHASE_REVENUE
@@ -451,9 +450,9 @@ WITH country_code_map AS (
         -- Revenue from Adjust API (event-date based)
         , COALESCE(cb.TOTAL_REVENUE, 0) AS TOTAL_REVENUE
         , COALESCE(cb.TOTAL_PURCHASE_REVENUE, 0) AS TOTAL_PURCHASE_REVENUE
-        , COALESCE(cb.TOTAL_AD_REVENUE, 0) AS TOTAL_AD_REVENUE
 
-        -- Cohort revenue (D7/D30 windows)
+        -- Cohort revenue (D7/D30 windows + lifetime ad revenue)
+        , COALESCE(cb.TOTAL_AD_REVENUE, 0) AS TOTAL_AD_REVENUE
         , COALESCE(cb.D7_REVENUE, 0) AS D7_REVENUE
         , COALESCE(cb.D30_REVENUE, 0) AS D30_REVENUE
         , COALESCE(cb.D7_PURCHASE_REVENUE, 0) AS D7_PURCHASE_REVENUE
@@ -555,9 +554,9 @@ SELECT
     -- Revenue from Adjust API (event-date based, more complete coverage)
     , ws.TOTAL_REVENUE
     , ws.TOTAL_PURCHASE_REVENUE
-    , ws.TOTAL_AD_REVENUE
 
-    -- Cohort revenue (install-date based D7/D30 windows, device-matched only)
+    -- Cohort revenue (install-date based, attribution-linked)
+    , ws.TOTAL_AD_REVENUE
     , ws.D7_REVENUE
     , ws.D30_REVENUE
     , ws.D7_PURCHASE_REVENUE

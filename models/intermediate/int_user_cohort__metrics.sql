@@ -19,16 +19,15 @@
     on_schema_change='append_new_columns'
 ) }}
 
--- Get first install per user from device mapping
+-- Get first install per user from attribution
 WITH user_installs AS (
     SELECT
-        dm.AMPLITUDE_USER_ID AS USER_ID
-        , dm.PLATFORM
-        , dm.ADJUST_DEVICE_ID
-        , dm.FIRST_SEEN_AT AS INSTALL_TIME
-        , DATE(dm.FIRST_SEEN_AT) AS INSTALL_DATE
-    FROM {{ ref('int_adjust_amplitude__device_mapping') }} dm
-    WHERE dm.AMPLITUDE_USER_ID IS NOT NULL
+        USER_ID
+        , PLATFORM
+        , INSTALL_TIME
+        , INSTALL_DATE
+    FROM {{ ref('int_user_cohort__attribution') }}
+    WHERE USER_ID IS NOT NULL
 )
 
 -- Dedupe to one row per user/platform, taking earliest install

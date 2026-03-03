@@ -10,34 +10,24 @@
 /*
     Daily marketing spend aggregated by channel and platform for MMM input
 
-    Source: Supermetrics adj_campaign (primary spend data source)
-    Channel mapping: network_mapping seed for consistent AD_PARTNER taxonomy
+    Source: Unified spend model (Adjust API + Fivetran Facebook + Fivetran Google)
+    Channel mapping: Already standardized in int_spend__unified
     Grain: one row per DATE + PLATFORM + CHANNEL
-
-    Note: This model uses only Supermetrics data to avoid double-counting spend
-    (Adjust API also has cost data but overlaps with Supermetrics for most partners)
 */
 
 WITH spend_with_channel AS (
     SELECT
-        s.DATE,
-        s.PLATFORM,
-        COALESCE(nm.AD_PARTNER, 'Other') AS CHANNEL,
-        SUM(s.COST) AS SPEND,
-        SUM(s.IMPRESSIONS) AS IMPRESSIONS,
-        SUM(s.CLICKS) AS CLICKS,
-        SUM(s.PAID_INSTALLS) AS PAID_INSTALLS
-    FROM {{ ref('stg_supermetrics__adj_campaign') }} s
-    -- Note: Snowflake treats unquoted identifiers as case-insensitive.
-    -- The seed CSV has lowercase headers (supermetrics_partner_name) but since
-    -- quote_columns is not set in dbt_project.yml, Snowflake uppercases them
-    -- internally. Using UPPERCASE here for project consistency.
-    LEFT JOIN {{ ref('network_mapping') }} nm
-        ON s.PARTNER_NAME = nm.SUPERMETRICS_PARTNER_NAME
-    WHERE s.DATE IS NOT NULL
-      AND s.COST > 0
+        DATE,
+        COALESCE(PLATFORM, 'All') AS PLATFORM,
+        CHANNEL,
+        SUM(SPEND) AS SPEND,
+        SUM(IMPRESSIONS) AS IMPRESSIONS,
+        SUM(CLICKS) AS CLICKS
+    FROM {{ ref('int_spend__unified') }}
+    WHERE DATE IS NOT NULL
+      AND SPEND > 0
     {% if is_incremental() %}
-      AND s.DATE >= DATEADD(day, -7, (SELECT MAX(DATE) FROM {{ this }}))
+      AND DATE >= DATEADD(day, -7, (SELECT MAX(DATE) FROM {{ this }}))
     {% endif %}
     GROUP BY 1, 2, 3
 )
@@ -48,6 +38,5 @@ SELECT
     CHANNEL,
     SPEND,
     IMPRESSIONS,
-    CLICKS,
-    PAID_INSTALLS
+    CLICKS
 FROM spend_with_channel

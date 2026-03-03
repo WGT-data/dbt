@@ -1,0 +1,10 @@
+version: 2
+
+sources:
+  - name: google_ads
+    database: FIVETRAN_DATABASE
+    schema: GOOGLE_ADS
+    tables:
+      - name: CAMPAIGN_STATS
+      - name: CAMPAIGN_HISTORY
+      - name: ACCOUNT_HISTORY

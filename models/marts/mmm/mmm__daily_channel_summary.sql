@@ -45,7 +45,7 @@ date_channel_grid AS (
 
 -- Step 4: Join actual data
 spend AS (
-    SELECT DATE, PLATFORM, CHANNEL, SPEND, IMPRESSIONS, CLICKS, PAID_INSTALLS
+    SELECT DATE, PLATFORM, CHANNEL, SPEND, IMPRESSIONS, CLICKS
     FROM {{ ref('int_mmm__daily_channel_spend') }}
 ),
 
@@ -69,7 +69,7 @@ SELECT
     COALESCE(s.SPEND, 0) AS SPEND,
     COALESCE(s.IMPRESSIONS, 0) AS IMPRESSIONS,
     COALESCE(s.CLICKS, 0) AS CLICKS,
-    COALESCE(s.PAID_INSTALLS, 0) AS PAID_INSTALLS_SUPERMETRICS,
+    0 AS PAID_INSTALLS_SUPERMETRICS,  -- deprecated: was from Supermetrics, now using INSTALLS from device data
 
     -- Install metrics (from device-level S3 data)
     COALESCE(i.INSTALLS, 0) AS INSTALLS,

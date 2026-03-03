@@ -4,19 +4,19 @@ models:
   - name: int_mmm__daily_channel_spend
     description: >
       Daily marketing spend aggregated by channel and platform for MMM input.
-      Source: Supermetrics adj_campaign data. Channel taxonomy via network_mapping seed.
+      Source: Unified spend (Adjust API + Fivetran Facebook + Fivetran Google).
     columns:
       - name: DATE
         description: Calendar date of spend
         data_tests:
           - not_null
       - name: PLATFORM
-        description: "iOS or Android"
+        description: "iOS, Android, or All (for sources without platform breakdown)"
         data_tests:
           - not_null
           - accepted_values:
               arguments:
-                values: ['iOS', 'Android']
+                values: ['iOS', 'Android', 'All']
       - name: CHANNEL
         description: "Standardized ad partner name (Meta, Google, TikTok, etc.)"
         data_tests:
@@ -27,8 +27,6 @@ models:
         description: Total ad impressions
       - name: CLICKS
         description: Total ad clicks
-      - name: PAID_INSTALLS
-        description: Paid installs reported by Supermetrics
     data_tests:
       - dbt_utils.unique_combination_of_columns:
           arguments:
