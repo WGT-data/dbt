@@ -1,10 +1,10 @@
-# Device ID Audit Queries
+# Analysis Queries
 
-This directory contains SQL analysis queries for **Phase 2: Device ID Audit & Documentation**. Each file is a single SQL statement that can be run individually in dbt Cloud IDE.
+This directory contains SQL analysis queries that can be run individually in dbt Cloud IDE or Snowflake.
 
 ## How to Run
 
-All queries use **fully qualified Snowflake table names** (not dbt `source()` or `ref()` functions). Run each file individually in dbt Cloud IDE or Snowflake.
+Queries in `reconciliation/` use dbt `ref()` functions — run them via **dbt Cloud IDE** (compile + run). Older Device ID audit queries use fully qualified Snowflake table names and can also be pasted directly into a Snowflake worksheet.
 
 ### dbt Cloud IDE
 
@@ -19,6 +19,34 @@ All queries use **fully qualified Snowflake table names** (not dbt `source()` or
 2. Click "Run"
 
 ## Query Files
+
+---
+
+### Data Reconciliation Audit (11 queries)
+
+Located in `reconciliation/`. Full audit documentation: [`docs/audit_data_reconciliation.md`](../docs/audit_data_reconciliation.md).
+
+**Start here** — run queries 01, 06, 08 first to surface top-level discrepancies, then drill into specific layers.
+
+| File | What it does |
+|------|-------------|
+| `reconciliation_01_cross_mart_spend.sql` | Compare spend across exec summary, biz overview, platform overview, and MMM marts |
+| `reconciliation_02_raw_vs_staging_adjust_spend.sql` | Validate Adjust API raw vs `stg_adjust__report_daily` spend |
+| `reconciliation_03_raw_vs_staging_facebook_spend.sql` | Validate Fivetran Facebook raw vs `v_stg_facebook_spend` |
+| `reconciliation_04_raw_vs_staging_google_spend.sql` | Validate Fivetran Google Ads raw vs `v_stg_google_ads__spend` |
+| `reconciliation_05_unified_spend_breakdown.sql` | Daily spend by source in `int_spend__unified` |
+| `reconciliation_06_cross_mart_installs.sql` | Compare 6 install definitions across all marts |
+| `reconciliation_07_api_vs_s3_installs.sql` | Adjust API installs vs S3 device-level installs (reinstall inflation) |
+| `reconciliation_08_cross_mart_revenue.sql` | Compare 4 revenue definitions across all marts |
+| `reconciliation_09_adjust_vs_wgt_revenue.sql` | Adjust API revenue vs WGT.EVENTS.REVENUE (mobile only) |
+| `reconciliation_10_google_campaign_overlap.sql` | Detect Google campaigns present in both Adjust and Fivetran |
+| `reconciliation_11_google_country_code_validation.sql` | Validate Google Ads +2000 country code offset mapping |
+
+**Scope:** 2025-01-01 onward. **Run time:** ~10-60 seconds each.
+
+---
+
+### Device ID Format Audit (3 queries)
 
 Run in order for best investigative flow.
 

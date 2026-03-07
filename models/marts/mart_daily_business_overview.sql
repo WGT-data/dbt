@@ -2,7 +2,8 @@
 -- Top-line daily business trends combining Adjust spend/install data
 -- with all-platform game event metrics from WGT.EVENTS
 --
--- Adjust metrics: Spend, clicks, impressions, installs, sessions (iOS/Android only)
+-- Adjust metrics: Mobile spend, clicks, impressions, installs, sessions (iOS/Android)
+-- Fivetran metrics: Desktop spend (Facebook + Google via int_spend__unified)
 -- Event metrics: Revenue, DAU (round players), rounds played (ALL platforms)
 --
 -- Grain: One row per DATE
@@ -40,6 +41,21 @@ WITH adjust_daily AS (
 )
 
 -- =============================================
+-- DESKTOP SPEND (from Fivetran Facebook + Google via int_spend__unified)
+-- =============================================
+, desktop_spend AS (
+    SELECT
+        DATE
+        , SUM(SPEND) AS DESKTOP_SPEND
+    FROM {{ ref('int_spend__unified') }}
+    WHERE SOURCE IN ('fivetran_facebook', 'fivetran_google')
+    {% if is_incremental() %}
+        AND DATE >= DATEADD(day, -3, (SELECT MAX(DATE) FROM {{ this }}))
+    {% endif %}
+    GROUP BY DATE
+)
+
+-- =============================================
 -- REVENUE FROM WGT.EVENTS.REVENUE (ALL platforms)
 -- =============================================
 , daily_revenue AS (
@@ -47,7 +63,7 @@ WITH adjust_daily AS (
         DATE(EVENTTIME) AS DATE
         , COUNT(*) AS REVENUE_EVENTS
         , COUNT(DISTINCT USERID) AS REVENUE_USERS
-        , SUM(COALESCE(REVENUE, 0)) AS TOTAL_REVENUE
+        , SUM(COALESCE(REVENUE, 0)) AS ALL_PLATFORM_REVENUE
         , SUM(CASE WHEN REVENUETYPE = 'direct' THEN COALESCE(REVENUE, 0) ELSE 0 END) AS PURCHASE_REVENUE
         , SUM(CASE WHEN REVENUETYPE = 'indirect' THEN COALESCE(REVENUE, 0) ELSE 0 END) AS AD_REVENUE
         , COUNT(DISTINCT CASE WHEN REVENUETYPE = 'direct' THEN USERID END) AS PURCHASERS
@@ -84,8 +100,10 @@ WITH adjust_daily AS (
     SELECT
         COALESCE(a.DATE, r.DATE, d.DATE) AS DATE
 
-        -- Adjust spend & acquisition
-        , COALESCE(a.TOTAL_SPEND, 0) AS TOTAL_SPEND
+        -- Spend (mobile from Adjust + desktop from Fivetran)
+        , COALESCE(a.TOTAL_SPEND, 0) AS MOBILE_SPEND
+        , COALESCE(ds.DESKTOP_SPEND, 0) AS DESKTOP_SPEND
+        , COALESCE(a.TOTAL_SPEND, 0) + COALESCE(ds.DESKTOP_SPEND, 0) AS TOTAL_SPEND
         , COALESCE(a.TOTAL_IMPRESSIONS, 0) AS TOTAL_IMPRESSIONS
         , COALESCE(a.TOTAL_CLICKS, 0) AS TOTAL_CLICKS
         , COALESCE(a.TOTAL_INSTALLS, 0) AS TOTAL_INSTALLS
@@ -96,7 +114,7 @@ WITH adjust_daily AS (
         , COALESCE(a.ADJUST_AD_REVENUE, 0) AS ADJUST_AD_REVENUE
 
         -- Event-based revenue (all platforms)
-        , COALESCE(r.TOTAL_REVENUE, 0) AS TOTAL_REVENUE
+        , COALESCE(r.ALL_PLATFORM_REVENUE, 0) AS ALL_PLATFORM_REVENUE
         , COALESCE(r.PURCHASE_REVENUE, 0) AS PURCHASE_REVENUE
         , COALESCE(r.AD_REVENUE, 0) AS AD_REVENUE
         , COALESCE(r.REVENUE_EVENTS, 0) AS REVENUE_EVENTS
@@ -112,12 +130,15 @@ WITH adjust_daily AS (
     FROM adjust_daily a
     FULL OUTER JOIN daily_revenue r ON a.DATE = r.DATE
     FULL OUTER JOIN daily_rounds d ON COALESCE(a.DATE, r.DATE) = d.DATE
+    LEFT JOIN desktop_spend ds ON COALESCE(a.DATE, r.DATE, d.DATE) = ds.DATE
 )
 
 SELECT
     DATE
 
     -- Spend & Acquisition
+    , MOBILE_SPEND
+    , DESKTOP_SPEND
     , TOTAL_SPEND
     , TOTAL_IMPRESSIONS
     , TOTAL_CLICKS
@@ -128,7 +149,7 @@ SELECT
     , TOTAL_REATTRIBUTIONS
 
     -- Revenue (all platforms, from WGT.EVENTS)
-    , TOTAL_REVENUE
+    , ALL_PLATFORM_REVENUE
     , PURCHASE_REVENUE
     , AD_REVENUE
     , REVENUE_EVENTS
@@ -144,9 +165,9 @@ SELECT
 
     -- Derived KPIs
     , CASE WHEN TOTAL_INSTALLS > 0 THEN TOTAL_SPEND / TOTAL_INSTALLS ELSE NULL END AS BLENDED_CPI
-    , CASE WHEN TOTAL_SPEND > 0 THEN TOTAL_REVENUE / TOTAL_SPEND ELSE NULL END AS ROAS
+    , CASE WHEN TOTAL_SPEND > 0 THEN ALL_PLATFORM_REVENUE / TOTAL_SPEND ELSE NULL END AS ROAS
     , CASE WHEN TOTAL_SPEND > 0 THEN PURCHASE_REVENUE / TOTAL_SPEND ELSE NULL END AS PURCHASE_ROAS
-    , CASE WHEN DAU > 0 THEN TOTAL_REVENUE / DAU ELSE NULL END AS ARPDAU
+    , CASE WHEN DAU > 0 THEN ALL_PLATFORM_REVENUE / DAU ELSE NULL END AS ARPDAU
     , CASE WHEN DAU > 0 THEN TOTAL_ROUNDS / DAU ELSE NULL END AS ROUNDS_PER_DAU
     , CASE WHEN DAU > 0 THEN PURCHASERS / DAU ELSE NULL END AS PAYER_CONVERSION_RATE
 

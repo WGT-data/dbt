@@ -1,0 +1,67 @@
+version: 2
+
+models:
+  - name: mart_daily_overview_by_platform_measures
+    description: |
+      Power BI Measures Table for the Daily Overview by Platform dashboard.
+
+      This is a single-row scaffold table. Create all DAX measures on this table
+      so they appear under a "Measures" group in the Power BI Fields pane.
+
+      IMPORTANT: Do NOT sum pre-computed ratio columns directly in visuals.
+      Ratios must be recalculated in DAX from additive base metrics so they
+      aggregate correctly across all slicer combinations.
+
+      Fact table reference: mart_daily_overview_by_platform
+      Grain: One row per DATE / PLATFORM / COUNTRY
+
+      ── DAX Measures ──────────────────────────────────────────────────
+
+      -- SPEND --
+      Total Cost        = SUM(mart_daily_overview_by_platform[COST])
+      Total Impressions = SUM(mart_daily_overview_by_platform[IMPRESSIONS])
+      Total Clicks      = SUM(mart_daily_overview_by_platform[CLICKS])
+      Total Sessions    = SUM(mart_daily_overview_by_platform[SESSIONS])
+
+      -- INSTALLS --
+      Adjust Installs = SUM(mart_daily_overview_by_platform[ADJUST_INSTALLS])
+      Paid Installs   = SUM(mart_daily_overview_by_platform[PAID_INSTALLS])
+
+      -- EFFICIENCY --
+      CPM                  = DIVIDE([Total Cost], [Total Impressions], BLANK()) * 1000
+      CTR                  = DIVIDE([Total Clicks], [Total Impressions], BLANK())
+      CPI                  = DIVIDE([Total Cost], [Adjust Installs], BLANK())
+      Cost Per Paid Install = DIVIDE([Total Cost], [Paid Installs], BLANK())
+
+      -- REVENUE --
+      Total Revenue    = SUM(mart_daily_overview_by_platform[TOTAL_REVENUE])
+      Purchase Revenue = SUM(mart_daily_overview_by_platform[PURCHASE_REVENUE])
+      Ad Revenue       = SUM(mart_daily_overview_by_platform[AD_REVENUE])
+
+      -- ROAS --
+      Total ROAS    = DIVIDE([Total Revenue], [Total Cost], BLANK())
+      Purchase ROAS = DIVIDE([Purchase Revenue], [Total Cost], BLANK())
+      Ad ROAS       = DIVIDE([Ad Revenue], [Total Cost], BLANK())
+
+      -- USER METRICS --
+      Revenue Events  = SUM(mart_daily_overview_by_platform[REVENUE_EVENTS])
+      Revenue Users   = SUM(mart_daily_overview_by_platform[REVENUE_USERS])
+      Purchasers      = SUM(mart_daily_overview_by_platform[PURCHASERS])
+      Ad Revenue Users = SUM(mart_daily_overview_by_platform[AD_REVENUE_USERS])
+
+      -- ARPU --
+      ARPU          = DIVIDE([Total Revenue], [Revenue Users], BLANK())
+      Purchase ARPU = DIVIDE([Purchase Revenue], [Purchasers], BLANK())
+
+      -- CONVERSION RATES --
+      Payer Rate           = DIVIDE([Purchasers], [Revenue Users], BLANK())
+      Ad Monetization Rate = DIVIDE([Ad Revenue Users], [Revenue Users], BLANK())
+      Revenue Per Session  = DIVIDE([Total Revenue], [Total Sessions], BLANK())
+
+    columns:
+      - name: MEASURE_ID
+        description: Anchor column (always 1)
+      - name: MEASURE_GROUP
+        description: Label for this measures group
+      - name: LAST_REFRESHED
+        description: Timestamp of the last dbt run

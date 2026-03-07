@@ -1,0 +1,2 @@
+000904 (42000): SQL compilation error: error line 6 at position 10
+invalid identifier 'DATE_START'

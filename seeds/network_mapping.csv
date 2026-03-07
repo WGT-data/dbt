@@ -3,27 +3,43 @@ Facebook Installs,34,Facebook,Meta
 Facebook Messenger Installs,34,Facebook,Meta
 Instagram Installs,34,Facebook,Meta
 Off-Facebook Installs,34,Facebook,Meta
+Facebook (Ad Spend),34,Facebook,Meta
 AppLovin_iOS_2019,7,Applovin,AppLovin
+AppLovin_Android_2019,7,Applovin,AppLovin
+Applovin (Ad Spend),7,Applovin,AppLovin
 Google Ads ACE,254,Google Ads,Google
 Google Ads ACI,254,Google Ads,Google
 google,254,Google Ads,Google
+Google Ads (Ad Spend),254,Google Ads,Google
 Apple Search Ads,257,Apple,Apple
+Apple (Ad Spend),257,Apple,Apple
 Moloco_DSP_iOS,56,MOLOCO,Moloco
+Moloco_DSP_Android,56,MOLOCO,Moloco
+MOLOCO (Ad Spend),56,MOLOCO,Moloco
 Smadex DSP - iOS,715,Smadex,Smadex
 Smadex DSP - iOS 2025,715,Smadex,Smadex
 Smadex DSP - iOS 2025 NEW,715,Smadex,Smadex
+Smadex (Ad Spend),715,Smadex,Smadex
 TikTok SAN,2337,TikTok for Business,TikTok
 TikTok_Paid_Ads_iOS,2337,TikTok for Business,TikTok
+TikTok_Paid_Ads_Android,2337,TikTok for Business,TikTok
 Tiktok Installs,2337,TikTok for Business,TikTok
+TikTok for Business (Ad Spend),2337,TikTok for Business,TikTok
 UnityAds_2023_iOS_Launch_Campaign,42,Unity Ads,Unity
 UnityAds_2023_iOS_ROAS_D7_Campaign,42,Unity Ads,Unity
-Organic,-300,Organic,Organic
-AdAction_iOS_2021,234,AdAction,AdAction
-AdAction_Android_2021,234,AdAction,AdAction
-AppLovin_Android_2019,7,Applovin,AppLovin
 UnityAds_Android_Dec2024,42,Unity Ads,Unity
-TikTok_Paid_Ads_Android,2337,TikTok for Business,TikTok
-Moloco_DSP_Android,56,MOLOCO,Moloco
+Unity Ads (Ad Spend),42,Unity Ads,Unity
 Tapjoy,464,Tapjoy,Tapjoy
 Tapjoy_Android_CPE_Campaign2021,464,Tapjoy,Tapjoy
+Tapjoy (Ad Spend),464,Tapjoy,Tapjoy
+Vungle (Ad Spend),,,Vungle
+Vungle_Android_selfserve_2020,,,Vungle
+Vungle_iOS_selfserve_2020,,,Vungle
+Chartboost (Ad Spend),,,Chartboost
+Chartboost_Android_2022,,,Chartboost
+Liftoff (Ad Spend),,,Liftoff
+Liftoff_iOS_2020,,,Liftoff
+Organic,-300,Organic,Organic
 Unattributed,-300,Organic,Unattributed
+AdAction_iOS_2021,234,AdAction,AdAction
+AdAction_Android_2021,234,AdAction,AdAction

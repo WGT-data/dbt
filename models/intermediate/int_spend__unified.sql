@@ -6,9 +6,14 @@
 
 /*
     Unified spend model combining three sources:
-    1. Fivetran Facebook (all rows — zero campaign overlap with Adjust)
+    1. Fivetran Facebook (web/desktop ad account — no overlap with Adjust mobile campaigns)
     2. Fivetran Google (all rows — preferred over Adjust for overlapping campaigns)
-    3. Adjust API (excluding Meta entirely + overlapping Google campaigns)
+    3. Adjust API (mobile Meta campaigns + non-overlapping Google campaigns + all other networks)
+
+    Dedup logic:
+    - Meta: Fivetran has web/desktop account, Adjust has mobile accounts — zero overlap, include both
+    - Google: Fivetran preferred where campaign IDs overlap; Adjust fills the rest
+    - All others: Adjust only
 
     Grain: DATE + SOURCE + CHANNEL + CAMPAIGN_ID + PLATFORM
 */
@@ -41,10 +46,15 @@ google_spend AS (
     FROM {{ ref('v_stg_google_ads__spend') }}
 ),
 
--- Collect Google campaign IDs for dedup against Adjust
+-- Collect campaign IDs from Fivetran sources for dedup against Adjust
 google_campaign_ids AS (
     SELECT DISTINCT CAMPAIGN_ID
     FROM google_spend
+),
+
+fb_campaign_ids AS (
+    SELECT DISTINCT CAMPAIGN_ID
+    FROM fb_spend
 ),
 
 adjust_spend AS (
@@ -63,11 +73,14 @@ adjust_spend AS (
         ON s.PARTNER_NAME = nm.ADJUST_NETWORK_NAME
     WHERE s.DATE IS NOT NULL
       AND s.NETWORK_COST > 0
-      -- Exclude all Meta spend (different ad accounts, Fivetran is source of truth)
-      AND COALESCE(nm.AD_PARTNER, '') != 'Meta'
-      -- Exclude overlapping Google campaigns (Fivetran preferred)
+      -- Exclude Meta campaigns that already exist in Fivetran Facebook (dedup by campaign ID)
       AND NOT (
-          COALESCE(nm.AD_PARTNER, '') = 'Google'
+          (COALESCE(nm.AD_PARTNER, '') = 'Meta' OR LOWER(s.PARTNER_NAME) LIKE '%facebook%' OR LOWER(s.PARTNER_NAME) LIKE '%instagram%')
+          AND s.CAMPAIGN_ID_NETWORK IN (SELECT CAMPAIGN_ID FROM fb_campaign_ids)
+      )
+      -- Exclude Google campaigns that already exist in Fivetran Google (dedup by campaign ID)
+      AND NOT (
+          (COALESCE(nm.AD_PARTNER, '') = 'Google' OR LOWER(s.PARTNER_NAME) LIKE '%google%')
           AND s.CAMPAIGN_ID_NETWORK IN (SELECT CAMPAIGN_ID FROM google_campaign_ids)
       )
 )

@@ -20,11 +20,11 @@
 --   - iOS only, SKAN 3.0 (campaign level only — no adgroup/creative in postback)
 --   - NEW_INSTALL_COUNT used (excludes redownloads)
 --
--- Grain: One row per AD_PARTNER / NETWORK_NAME / CAMPAIGN_NAME / CAMPAIGN_ID / PLATFORM / COUNTRY / DATE
+-- Grain: One row per AD_PARTNER / NETWORK_NAME / CAMPAIGN_NAME / PLATFORM / COUNTRY / DATE
 
 {{ config(
     materialized='incremental',
-    unique_key=['AD_PARTNER', 'NETWORK_NAME', 'CAMPAIGN_NAME', 'CAMPAIGN_ID', 'PLATFORM', 'COUNTRY', 'DATE'],
+    unique_key=['AD_PARTNER', 'NETWORK_NAME', 'CAMPAIGN_NAME', 'PLATFORM', 'COUNTRY', 'DATE'],
     incremental_strategy='merge',
     on_schema_change='append_new_columns',
     tags=['mart', 'performance', 'executive']
@@ -186,7 +186,6 @@ WITH country_code_map AS (
     SELECT DATE
          , COALESCE(pm.AD_PARTNER, s.PARTNER_NAME) AS AD_PARTNER
          , s.CAMPAIGN_NETWORK AS CAMPAIGN_NAME
-         , s.CAMPAIGN_ID_NETWORK AS CAMPAIGN_ID
          , s.PLATFORM
          , LOWER(COALESCE(ccm.code, '__none__')) AS COUNTRY
          , SUM(s.NETWORK_COST) AS COST
@@ -202,7 +201,7 @@ WITH country_code_map AS (
     {% if is_incremental() %}
         AND s.DATE >= DATEADD(day, -3, (SELECT MAX(DATE) FROM {{ this }}))
     {% endif %}
-    GROUP BY 1, 2, 3, 4, 5, 6
+    GROUP BY 1, 2, 3, 4, 5
 )
 
 -- User attribution data
@@ -259,10 +258,17 @@ WITH country_code_map AS (
 -- SKAN installs (campaign level only — SKAN 3.0 limitation)
 -- Infer country from campaign name patterns since SKAN has no country dimension
 -- Valid target countries: US, UK, AU, CA, NZ, ZA, EU (region)
+--
+-- SAN HANDLING: Meta and Google SKAN postbacks use different campaign names than
+-- the Adjust API spend data, so campaign-level join is impossible. For these
+-- partners, we aggregate SKAN to partner/date/country level (campaign = NULL).
+-- The FULL OUTER JOIN below will create standalone rows for these; at the
+-- AD_PARTNER level in BI, SKAN totals roll up correctly.
 , skan_data AS (
     SELECT
         AD_PARTNER
-        , CAMPAIGN_NAME
+        -- SANs: null out campaign name to aggregate at partner/date/country level
+        , CASE WHEN AD_PARTNER IN ('Meta', 'Google') THEN NULL ELSE CAMPAIGN_NAME END AS CAMPAIGN_NAME
         , INSTALL_DATE
         , LOWER(
             REPLACE(
@@ -371,7 +377,6 @@ WITH country_code_map AS (
         , COALESCE(s.AD_PARTNER, c.AD_PARTNER) AS AD_PARTNER
         , c.NETWORK_NAME
         , COALESCE(s.CAMPAIGN_NAME, c.CAMPAIGN_NAME) AS CAMPAIGN_NAME
-        , s.CAMPAIGN_ID
         , COALESCE(s.PLATFORM, c.PLATFORM) AS PLATFORM
         , COALESCE(s.COUNTRY, c.COUNTRY, '__none__') AS COUNTRY
 
@@ -434,7 +439,6 @@ WITH country_code_map AS (
         , COALESCE(cb.AD_PARTNER, sk.AD_PARTNER) AS AD_PARTNER
         , cb.NETWORK_NAME
         , COALESCE(cb.CAMPAIGN_NAME, sk.CAMPAIGN_NAME) AS CAMPAIGN_NAME
-        , cb.CAMPAIGN_ID
         , COALESCE(cb.PLATFORM, 'iOS') AS PLATFORM
         , COALESCE(cb.COUNTRY, sk.INFERRED_COUNTRY, '__none__') AS COUNTRY
 
@@ -485,147 +489,186 @@ WITH country_code_map AS (
         AND cb.COUNTRY = sk.INFERRED_COUNTRY
 )
 
+-- Aggregate to unique key grain to prevent merge duplicates from fan-out joins
+-- (multiple NETWORK_NAMEs can collapse to the same key after COALESCE)
+, final_agg AS (
+    SELECT
+        ws.DATE
+        , ws.AD_PARTNER
+        , COALESCE(ws.NETWORK_NAME, '__none__') AS NETWORK_NAME
+        , COALESCE(ws.CAMPAIGN_NAME, '__none__') AS CAMPAIGN_NAME
+        , ws.PLATFORM
+        , COALESCE(cn.name, UPPER(ws.COUNTRY), '__none__') AS COUNTRY
+
+        , SUM(ws.COST) AS COST
+        , SUM(ws.CLICKS) AS CLICKS
+        , SUM(ws.IMPRESSIONS) AS IMPRESSIONS
+        , SUM(ws.ADJUST_INSTALLS) AS ADJUST_INSTALLS
+        , SUM(ws.SKAN_INSTALLS) AS SKAN_INSTALLS
+        , SUM(ws.ATTRIBUTION_INSTALLS) AS ATTRIBUTION_INSTALLS
+        , SUM(ws.TOTAL_REVENUE) AS ADJUST_ALL_REVENUE
+        , SUM(ws.TOTAL_PURCHASE_REVENUE) AS TOTAL_PURCHASE_REVENUE
+        , SUM(ws.TOTAL_AD_REVENUE) AS TOTAL_AD_REVENUE
+        , SUM(ws.D7_REVENUE) AS D7_REVENUE
+        , SUM(ws.D30_REVENUE) AS D30_REVENUE
+        , SUM(ws.D7_PURCHASE_REVENUE) AS D7_PURCHASE_REVENUE
+        , SUM(ws.D30_PURCHASE_REVENUE) AS D30_PURCHASE_REVENUE
+        , SUM(ws.D7_AD_REVENUE) AS D7_AD_REVENUE
+        , SUM(ws.D30_AD_REVENUE) AS D30_AD_REVENUE
+        , SUM(ws.TOTAL_PAYING_USERS) AS TOTAL_PAYING_USERS
+        , SUM(ws.D7_PAYING_USERS) AS D7_PAYING_USERS
+        , SUM(ws.D30_PAYING_USERS) AS D30_PAYING_USERS
+        , SUM(ws.D1_RETAINED_USERS) AS D1_RETAINED_USERS
+        , SUM(ws.D7_RETAINED_USERS) AS D7_RETAINED_USERS
+        , SUM(ws.D30_RETAINED_USERS) AS D30_RETAINED_USERS
+        , SUM(ws.D1_MATURED_USERS) AS D1_MATURED_USERS
+        , SUM(ws.D7_MATURED_USERS) AS D7_MATURED_USERS
+        , SUM(ws.D30_MATURED_USERS) AS D30_MATURED_USERS
+
+    FROM with_skan ws
+    LEFT JOIN country_code_map cn ON ws.COUNTRY = cn.code
+    WHERE ws.DATE IS NOT NULL
+    GROUP BY 1, 2, 3, 4, 5, 6
+)
+
 SELECT
-    ws.DATE
-    , ws.AD_PARTNER
+    DATE
+    , AD_PARTNER
     , CASE
-        WHEN ws.AD_PARTNER IN ('Meta', 'Google', 'Apple', 'AppLovin', 'Moloco', 'Unity', 'TikTok', 'Smadex') THEN ws.AD_PARTNER
-        WHEN ws.AD_PARTNER = 'Organic' THEN 'Organic'
-        WHEN ws.AD_PARTNER = 'Unattributed' THEN 'Unattributed'
-        WHEN ws.AD_PARTNER LIKE '%Vungle%' THEN 'Vungle'
-        WHEN ws.AD_PARTNER LIKE '%Liftoff%' OR ws.AD_PARTNER LIKE '%liftoff%' THEN 'Liftoff'
-        WHEN ws.AD_PARTNER LIKE '%Chartboost%' OR ws.AD_PARTNER LIKE '%chartboost%' THEN 'Chartboost'
-        WHEN ws.AD_PARTNER LIKE '%AdColony%' OR ws.AD_PARTNER LIKE '%adcolony%' THEN 'AdColony'
-        WHEN ws.AD_PARTNER LIKE '%AdAction%' THEN 'AdAction'
-        WHEN ws.AD_PARTNER LIKE '%ironSource%' THEN 'ironSource'
-        WHEN ws.AD_PARTNER LIKE '%Cross%Install%' OR ws.AD_PARTNER LIKE '%cross%install%' THEN 'Cross-Install'
-        WHEN ws.AD_PARTNER LIKE '%Tapjoy%' THEN 'Tapjoy'
-        WHEN ws.AD_PARTNER LIKE '%Topgolf%' THEN 'Topgolf (Internal)'
-        WHEN ws.AD_PARTNER LIKE '%applift%' OR ws.AD_PARTNER LIKE '%Applift%' OR ws.AD_PARTNER LIKE '%AppLift%' THEN 'AppLift'
-        WHEN ws.AD_PARTNER LIKE '%Google%' THEN 'Google'
-        WHEN ws.AD_PARTNER LIKE 'Untrusted%' THEN 'Untrusted Devices'
-        WHEN ws.AD_PARTNER IS NULL THEN 'Unknown'
+        WHEN AD_PARTNER IN ('Meta', 'Google', 'Apple', 'AppLovin', 'Moloco', 'Unity', 'TikTok', 'Smadex') THEN AD_PARTNER
+        WHEN AD_PARTNER = 'Organic' THEN 'Organic'
+        WHEN AD_PARTNER = 'Unattributed' THEN 'Unattributed'
+        WHEN AD_PARTNER LIKE '%Vungle%' THEN 'Vungle'
+        WHEN AD_PARTNER LIKE '%Liftoff%' OR AD_PARTNER LIKE '%liftoff%' THEN 'Liftoff'
+        WHEN AD_PARTNER LIKE '%Chartboost%' OR AD_PARTNER LIKE '%chartboost%' THEN 'Chartboost'
+        WHEN AD_PARTNER LIKE '%AdColony%' OR AD_PARTNER LIKE '%adcolony%' THEN 'AdColony'
+        WHEN AD_PARTNER LIKE '%AdAction%' THEN 'AdAction'
+        WHEN AD_PARTNER LIKE '%ironSource%' THEN 'ironSource'
+        WHEN AD_PARTNER LIKE '%Cross%Install%' OR AD_PARTNER LIKE '%cross%install%' THEN 'Cross-Install'
+        WHEN AD_PARTNER LIKE '%Tapjoy%' THEN 'Tapjoy'
+        WHEN AD_PARTNER LIKE '%Topgolf%' THEN 'Topgolf (Internal)'
+        WHEN AD_PARTNER LIKE '%applift%' OR AD_PARTNER LIKE '%Applift%' OR AD_PARTNER LIKE '%AppLift%' THEN 'AppLift'
+        WHEN AD_PARTNER LIKE '%Google%' THEN 'Google'
+        WHEN AD_PARTNER LIKE 'Untrusted%' THEN 'Untrusted Devices'
+        WHEN AD_PARTNER IS NULL THEN 'Unknown'
         ELSE 'Other'
       END AS AD_PARTNER_GROUPED
-    , COALESCE(ws.NETWORK_NAME, '__none__') AS NETWORK_NAME
-    , COALESCE(ws.CAMPAIGN_NAME, '__none__') AS CAMPAIGN_NAME
-    , COALESCE(ws.CAMPAIGN_ID, '__none__') AS CAMPAIGN_ID
-    , ws.PLATFORM
-    , COALESCE(cn.name, UPPER(ws.COUNTRY), '__none__') AS COUNTRY
+    , NETWORK_NAME
+    , CAMPAIGN_NAME
+    , PLATFORM
+    , COUNTRY
 
     -- Date grain columns (for Power BI granularity selector)
-    , DATE_TRUNC('week', ws.DATE)::DATE AS WEEK_START
-    , DATE_TRUNC('month', ws.DATE)::DATE AS MONTH_START
-    , DATE_TRUNC('quarter', ws.DATE)::DATE AS QUARTER_START
-    , DATE_TRUNC('year', ws.DATE)::DATE AS YEAR_START
+    , DATE_TRUNC('week', DATE)::DATE AS WEEK_START
+    , DATE_TRUNC('month', DATE)::DATE AS MONTH_START
+    , DATE_TRUNC('quarter', DATE)::DATE AS QUARTER_START
+    , DATE_TRUNC('year', DATE)::DATE AS YEAR_START
 
     -- Core spend metrics
-    , ws.COST
-    , ws.CLICKS
-    , ws.IMPRESSIONS
+    , COST
+    , CLICKS
+    , IMPRESSIONS
 
     -- Install metrics
-    , ws.ADJUST_INSTALLS
-    , ws.SKAN_INSTALLS
-    , ws.ADJUST_INSTALLS + ws.SKAN_INSTALLS AS TOTAL_INSTALLS
-    , ws.ATTRIBUTION_INSTALLS
+    , ADJUST_INSTALLS
+    , SKAN_INSTALLS
+    , ADJUST_INSTALLS + SKAN_INSTALLS AS TOTAL_INSTALLS
+    , ATTRIBUTION_INSTALLS
 
     -- Efficiency metrics (denominator = Adjust + SKAN Installs)
-    , CASE WHEN (ws.ADJUST_INSTALLS + ws.SKAN_INSTALLS) > 0
-        THEN ws.COST / (ws.ADJUST_INSTALLS + ws.SKAN_INSTALLS)
+    , CASE WHEN (ADJUST_INSTALLS + SKAN_INSTALLS) > 0
+        THEN COST / (ADJUST_INSTALLS + SKAN_INSTALLS)
         ELSE NULL END AS CPI
 
-    , CASE WHEN ws.IMPRESSIONS > 0
-        THEN (ws.COST / ws.IMPRESSIONS) * 1000
+    , CASE WHEN IMPRESSIONS > 0
+        THEN (COST / IMPRESSIONS) * 1000
         ELSE NULL END AS CPM
 
-    , CASE WHEN ws.IMPRESSIONS > 0
-        THEN ws.CLICKS / ws.IMPRESSIONS
+    , CASE WHEN IMPRESSIONS > 0
+        THEN CLICKS / IMPRESSIONS
         ELSE NULL END AS CTR
 
-    , CASE WHEN ws.CLICKS > 0
-        THEN (ws.ADJUST_INSTALLS + ws.SKAN_INSTALLS)::FLOAT / ws.CLICKS
+    , CASE WHEN CLICKS > 0
+        THEN (ADJUST_INSTALLS + SKAN_INSTALLS)::FLOAT / CLICKS
         ELSE NULL END AS CVR
 
-    , CASE WHEN ws.IMPRESSIONS > 0
-        THEN ((ws.ADJUST_INSTALLS + ws.SKAN_INSTALLS)::FLOAT / ws.IMPRESSIONS) * 1000
+    , CASE WHEN IMPRESSIONS > 0
+        THEN ((ADJUST_INSTALLS + SKAN_INSTALLS)::FLOAT / IMPRESSIONS) * 1000
         ELSE NULL END AS IPM
 
     -- Revenue from Adjust API (event-date based, more complete coverage)
-    , ws.TOTAL_REVENUE
-    , ws.TOTAL_PURCHASE_REVENUE
+    , ADJUST_ALL_REVENUE
+    , TOTAL_PURCHASE_REVENUE
 
     -- Cohort revenue (install-date based, attribution-linked)
-    , ws.TOTAL_AD_REVENUE
-    , ws.D7_REVENUE
-    , ws.D30_REVENUE
-    , ws.D7_PURCHASE_REVENUE
-    , ws.D30_PURCHASE_REVENUE
-    , ws.D7_AD_REVENUE
-    , ws.D30_AD_REVENUE
+    , TOTAL_AD_REVENUE
+    , D7_REVENUE
+    , D30_REVENUE
+    , D7_PURCHASE_REVENUE
+    , D30_PURCHASE_REVENUE
+    , D7_AD_REVENUE
+    , D30_AD_REVENUE
 
     -- ROAS (based on total revenue)
-    , CASE WHEN ws.COST > 0 THEN ws.TOTAL_REVENUE / ws.COST ELSE NULL END AS TOTAL_ROAS
-    , CASE WHEN ws.COST > 0 THEN ws.D7_REVENUE / ws.COST ELSE NULL END AS D7_ROAS
-    , CASE WHEN ws.COST > 0 THEN ws.D30_REVENUE / ws.COST ELSE NULL END AS D30_ROAS
+    , CASE WHEN COST > 0 THEN ADJUST_ALL_REVENUE / COST ELSE NULL END AS TOTAL_ROAS
+    , CASE WHEN COST > 0 THEN D7_REVENUE / COST ELSE NULL END AS D7_ROAS
+    , CASE WHEN COST > 0 THEN D30_REVENUE / COST ELSE NULL END AS D30_ROAS
 
     -- ARPI (Average Revenue Per Install — uses Adjust + SKAN Installs)
-    , CASE WHEN (ws.ADJUST_INSTALLS + ws.SKAN_INSTALLS) > 0
-        THEN ws.TOTAL_REVENUE / (ws.ADJUST_INSTALLS + ws.SKAN_INSTALLS)
+    , CASE WHEN (ADJUST_INSTALLS + SKAN_INSTALLS) > 0
+        THEN ADJUST_ALL_REVENUE / (ADJUST_INSTALLS + SKAN_INSTALLS)
         ELSE NULL END AS ARPI
-    , CASE WHEN (ws.ADJUST_INSTALLS + ws.SKAN_INSTALLS) > 0
-        THEN ws.D7_REVENUE / (ws.ADJUST_INSTALLS + ws.SKAN_INSTALLS)
+    , CASE WHEN (ADJUST_INSTALLS + SKAN_INSTALLS) > 0
+        THEN D7_REVENUE / (ADJUST_INSTALLS + SKAN_INSTALLS)
         ELSE NULL END AS D7_ARPI
-    , CASE WHEN (ws.ADJUST_INSTALLS + ws.SKAN_INSTALLS) > 0
-        THEN ws.D30_REVENUE / (ws.ADJUST_INSTALLS + ws.SKAN_INSTALLS)
+    , CASE WHEN (ADJUST_INSTALLS + SKAN_INSTALLS) > 0
+        THEN D30_REVENUE / (ADJUST_INSTALLS + SKAN_INSTALLS)
         ELSE NULL END AS D30_ARPI
 
     -- Paying users
-    , ws.TOTAL_PAYING_USERS
-    , ws.D7_PAYING_USERS
-    , ws.D30_PAYING_USERS
+    , TOTAL_PAYING_USERS
+    , D7_PAYING_USERS
+    , D30_PAYING_USERS
 
     -- ARPPU (Average Revenue Per Paying User)
-    , CASE WHEN ws.TOTAL_PAYING_USERS > 0
-        THEN ws.TOTAL_REVENUE / ws.TOTAL_PAYING_USERS
+    , CASE WHEN TOTAL_PAYING_USERS > 0
+        THEN ADJUST_ALL_REVENUE / TOTAL_PAYING_USERS
         ELSE NULL END AS ARPPU
-    , CASE WHEN ws.D7_PAYING_USERS > 0
-        THEN ws.D7_REVENUE / ws.D7_PAYING_USERS
+    , CASE WHEN D7_PAYING_USERS > 0
+        THEN D7_REVENUE / D7_PAYING_USERS
         ELSE NULL END AS D7_ARPPU
-    , CASE WHEN ws.D30_PAYING_USERS > 0
-        THEN ws.D30_REVENUE / ws.D30_PAYING_USERS
+    , CASE WHEN D30_PAYING_USERS > 0
+        THEN D30_REVENUE / D30_PAYING_USERS
         ELSE NULL END AS D30_ARPPU
 
     -- Cost Per Paying User
-    , CASE WHEN ws.TOTAL_PAYING_USERS > 0
-        THEN ws.COST / ws.TOTAL_PAYING_USERS
+    , CASE WHEN TOTAL_PAYING_USERS > 0
+        THEN COST / TOTAL_PAYING_USERS
         ELSE NULL END AS COST_PER_PAYING_USER
-    , CASE WHEN ws.D7_PAYING_USERS > 0
-        THEN ws.COST / ws.D7_PAYING_USERS
+    , CASE WHEN D7_PAYING_USERS > 0
+        THEN COST / D7_PAYING_USERS
         ELSE NULL END AS D7_COST_PER_PAYING_USER
-    , CASE WHEN ws.D30_PAYING_USERS > 0
-        THEN ws.COST / ws.D30_PAYING_USERS
+    , CASE WHEN D30_PAYING_USERS > 0
+        THEN COST / D30_PAYING_USERS
         ELSE NULL END AS D30_COST_PER_PAYING_USER
 
     -- Retention raw counts
-    , ws.D1_RETAINED_USERS
-    , ws.D7_RETAINED_USERS
-    , ws.D30_RETAINED_USERS
-    , ws.D1_MATURED_USERS
-    , ws.D7_MATURED_USERS
-    , ws.D30_MATURED_USERS
+    , D1_RETAINED_USERS
+    , D7_RETAINED_USERS
+    , D30_RETAINED_USERS
+    , D1_MATURED_USERS
+    , D7_MATURED_USERS
+    , D30_MATURED_USERS
 
     -- Retention rates
-    , CASE WHEN ws.D1_MATURED_USERS > 0
-        THEN ws.D1_RETAINED_USERS::FLOAT / ws.D1_MATURED_USERS
+    , CASE WHEN D1_MATURED_USERS > 0
+        THEN D1_RETAINED_USERS::FLOAT / D1_MATURED_USERS
         ELSE NULL END AS D1_RETENTION
-    , CASE WHEN ws.D7_MATURED_USERS > 0
-        THEN ws.D7_RETAINED_USERS::FLOAT / ws.D7_MATURED_USERS
+    , CASE WHEN D7_MATURED_USERS > 0
+        THEN D7_RETAINED_USERS::FLOAT / D7_MATURED_USERS
         ELSE NULL END AS D7_RETENTION
-    , CASE WHEN ws.D30_MATURED_USERS > 0
-        THEN ws.D30_RETAINED_USERS::FLOAT / ws.D30_MATURED_USERS
+    , CASE WHEN D30_MATURED_USERS > 0
+        THEN D30_RETAINED_USERS::FLOAT / D30_MATURED_USERS
         ELSE NULL END AS D30_RETENTION
 
-FROM with_skan ws
-LEFT JOIN country_code_map cn ON ws.COUNTRY = cn.code
-WHERE ws.DATE IS NOT NULL
+FROM final_agg

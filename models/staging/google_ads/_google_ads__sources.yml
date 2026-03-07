@@ -6,5 +6,6 @@ sources:
     schema: GOOGLE_ADS
     tables:
       - name: CAMPAIGN_STATS
+      - name: CAMPAIGN_COUNTRY_REPORT
       - name: CAMPAIGN_HISTORY
       - name: ACCOUNT_HISTORY
