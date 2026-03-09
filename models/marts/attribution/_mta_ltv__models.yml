@@ -1,0 +1,68 @@
+version: 2
+
+models:
+  - name: mta__campaign_ltv
+    description: |
+      MTA-Attributed LTV per Campaign — applies fractional MTA credit to device-level LTV windows.
+      Compare LTV across 6 attribution models × 6 LTV windows (D1, D7, D30, D180, D365, Total).
+
+      This model follows the same pattern as mta__campaign_performance but sources revenue
+      from int_ltv__device_revenue (device-level) instead of int_user_cohort__metrics (user-level).
+
+      Known limitations:
+      - iOS tactical analysis only (Android 0% device match rate)
+      - SANs (Meta, Google, Apple, TikTok) have 0% touchpoint data
+      - iOS IDFA consent ~7% limits coverage
+
+      Grain: One row per AD_PARTNER + CAMPAIGN_ID + PLATFORM + DATE
+    columns:
+      - name: AD_PARTNER
+        description: Standardized partner name (Meta, Google, TikTok, etc.)
+      - name: CAMPAIGN_ID
+        description: Network campaign identifier
+      - name: PLATFORM
+        description: iOS or Android
+      - name: DATE
+        description: Install date
+      - name: COST
+        description: Ad spend from Adjust API
+      - name: INSTALLS_LAST_TOUCH
+        description: Installs attributed via last-touch model
+      - name: INSTALLS_RECOMMENDED
+        description: Installs attributed via recommended (time-decay) model
+      - name: D1_REVENUE_RECOMMENDED
+        description: D1 revenue attributed via recommended model
+      - name: D7_REVENUE_RECOMMENDED
+        description: D7 revenue attributed via recommended model
+      - name: D30_REVENUE_RECOMMENDED
+        description: D30 revenue attributed via recommended model
+      - name: D180_REVENUE_RECOMMENDED
+        description: D180 revenue attributed via recommended model
+      - name: D365_REVENUE_RECOMMENDED
+        description: D365 revenue attributed via recommended model
+      - name: TOTAL_REVENUE_RECOMMENDED
+        description: Total revenue attributed via recommended model
+      - name: UNIQUE_DEVICES
+        description: Count of distinct devices with touchpoints
+      - name: DEVICES_WITH_USER_MAPPING
+        description: Devices successfully mapped to Amplitude users (revenue coverage indicator)
+      - name: D1_LTV_PER_INSTALL
+        description: D1 revenue per install using recommended attribution
+      - name: D7_LTV_PER_INSTALL
+        description: D7 revenue per install using recommended attribution
+      - name: D30_LTV_PER_INSTALL
+        description: D30 revenue per install using recommended attribution
+      - name: D180_LTV_PER_INSTALL
+        description: D180 revenue per install using recommended attribution
+      - name: D365_LTV_PER_INSTALL
+        description: D365 revenue per install using recommended attribution
+      - name: TOTAL_LTV_PER_INSTALL
+        description: Total revenue per install using recommended attribution
+      - name: CPI_RECOMMENDED
+        description: Cost per install using recommended attribution
+      - name: D7_ROAS_RECOMMENDED
+        description: 7-day ROAS using recommended attribution
+      - name: D30_ROAS_RECOMMENDED
+        description: 30-day ROAS using recommended attribution
+      - name: HAS_SPEND_NO_MTA
+        description: TRUE when spend exists but no MTA data could be matched (common for SANs)

@@ -1,0 +1,71 @@
+version: 2
+
+models:
+  - name: int_ltv__device_revenue
+    description: |
+      Bridge device-level installs to user-level revenue via device mapping.
+      Foundation for MTA-attributed LTV models.
+
+      Join path: v_stg_adjust__installs → int_adjust_amplitude__device_mapping → WGT.EVENTS.REVENUE
+
+      Known limitations:
+      - Android: 0% device match rate (Amplitude SDK uses random UUID, not GPS_ADID)
+      - iOS coverage limited by IDFV matching availability
+
+      Grain: One row per DEVICE_ID + PLATFORM
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - DEVICE_ID
+              - PLATFORM
+          config:
+            where: "INSTALL_DATE >= DATEADD(day, -60, CURRENT_DATE)"
+    columns:
+      - name: DEVICE_ID
+        description: Adjust device identifier (IDFV for iOS, GPS_ADID for Android)
+        data_tests:
+          - not_null:
+              config:
+                where: "INSTALL_DATE >= DATEADD(day, -60, CURRENT_DATE)"
+      - name: PLATFORM
+        description: iOS or Android
+        data_tests:
+          - not_null:
+              config:
+                where: "INSTALL_DATE >= DATEADD(day, -60, CURRENT_DATE)"
+          - accepted_values:
+              arguments:
+                values: ['iOS', 'Android']
+              config:
+                where: "INSTALL_DATE >= DATEADD(day, -60, CURRENT_DATE)"
+      - name: INSTALL_TIMESTAMP
+        description: Device install timestamp from Adjust
+      - name: INSTALL_DATE
+        description: Device install date
+      - name: AMPLITUDE_USER_ID
+        description: Mapped Amplitude user ID (NULL if no mapping found)
+      - name: HAS_USER_MAPPING
+        description: Whether this device was successfully mapped to an Amplitude user
+      - name: D1_REVENUE
+        description: Total revenue within 1 day of install
+      - name: D7_REVENUE
+        description: Total revenue within 7 days of install
+      - name: D30_REVENUE
+        description: Total revenue within 30 days of install
+      - name: D180_REVENUE
+        description: Total revenue within 180 days of install
+      - name: D365_REVENUE
+        description: Total revenue within 365 days of install
+      - name: TOTAL_REVENUE
+        description: Lifetime total revenue
+      - name: D1_MATURED
+        description: 1 if device has been installed for at least 1 day
+      - name: D7_MATURED
+        description: 1 if device has been installed for at least 7 days
+      - name: D30_MATURED
+        description: 1 if device has been installed for at least 30 days
+      - name: D180_MATURED
+        description: 1 if device has been installed for at least 180 days
+      - name: D365_MATURED
+        description: 1 if device has been installed for at least 365 days

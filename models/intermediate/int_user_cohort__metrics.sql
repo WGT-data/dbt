@@ -1,20 +1,27 @@
 -- int_user_cohort__metrics.sql
 -- Comprehensive user-level cohort metrics with revenue windows and retention flags
 -- This model joins Adjust installs with WGT.EVENTS data to calculate:
--- - D7, D30, and lifetime revenue per user
--- - D1, D7, D30 retention flags per user
+-- - D1, D7, D30, D180, D365, and lifetime revenue per user
+-- - D1, D7, D30, D180, D365 retention flags per user
 -- Grain: One row per user_id/platform combination
 --
 -- INCREMENTAL STRATEGY: Re-process users who:
 -- 1. Have new install records (new users)
--- 2. Are within 30-day maturity window (metrics still changing)
+-- 2. Are within 365-day maturity window (metrics still changing)
 -- 3. Have recent revenue/session events (existing user updates)
 
 {{ config(
     materialized='incremental',
     unique_key=['USER_ID', 'PLATFORM'],
     incremental_strategy='merge',
-    merge_update_columns=['D7_REVENUE', 'D30_REVENUE', 'TOTAL_REVENUE', 'D7_PURCHASE_REVENUE', 'D30_PURCHASE_REVENUE', 'TOTAL_PURCHASE_REVENUE', 'D7_AD_REVENUE', 'D30_AD_REVENUE', 'TOTAL_AD_REVENUE', 'IS_D7_PAYER', 'IS_D30_PAYER', 'IS_PAYER', 'D1_RETAINED', 'D7_RETAINED', 'D30_RETAINED', 'D1_MATURED', 'D7_MATURED', 'D30_MATURED'],
+    merge_update_columns=[
+        'D1_REVENUE', 'D7_REVENUE', 'D30_REVENUE', 'D180_REVENUE', 'D365_REVENUE', 'TOTAL_REVENUE',
+        'D1_PURCHASE_REVENUE', 'D7_PURCHASE_REVENUE', 'D30_PURCHASE_REVENUE', 'D180_PURCHASE_REVENUE', 'D365_PURCHASE_REVENUE', 'TOTAL_PURCHASE_REVENUE',
+        'D1_AD_REVENUE', 'D7_AD_REVENUE', 'D30_AD_REVENUE', 'D180_AD_REVENUE', 'D365_AD_REVENUE', 'TOTAL_AD_REVENUE',
+        'IS_D1_PAYER', 'IS_D7_PAYER', 'IS_D30_PAYER', 'IS_D180_PAYER', 'IS_D365_PAYER', 'IS_PAYER',
+        'D1_RETAINED', 'D7_RETAINED', 'D30_RETAINED', 'D180_RETAINED', 'D365_RETAINED',
+        'D1_MATURED', 'D7_MATURED', 'D30_MATURED', 'D180_MATURED', 'D365_MATURED'
+    ],
     tags=['cohort', 'user_metrics'],
     on_schema_change='append_new_columns'
 ) }}
@@ -46,8 +53,8 @@ WITH user_installs AS (
     SELECT USER_ID, PLATFORM, INSTALL_TIME, INSTALL_DATE
     FROM user_first_install
     {% if is_incremental() %}
-        -- Re-process users within D30 maturity window (metrics still evolving)
-        WHERE INSTALL_DATE >= DATEADD(day, -35, CURRENT_DATE())
+        -- Re-process users within D365 maturity window (metrics still evolving)
+        WHERE INSTALL_DATE >= DATEADD(day, -370, CURRENT_DATE())
     {% endif %}
 )
 
@@ -63,7 +70,7 @@ WITH user_installs AS (
     WHERE REVENUE IS NOT NULL
         AND PLATFORM IN ('iOS', 'Android')
     {% if is_incremental() %}
-        AND EVENTTIME >= DATEADD(day, -35, CURRENT_TIMESTAMP())
+        AND EVENTTIME >= DATEADD(day, -370, CURRENT_TIMESTAMP())
     {% endif %}
 )
 
@@ -78,7 +85,7 @@ WITH user_installs AS (
     WHERE USERID IS NOT NULL
         AND PLATFORM IN ('iOS', 'Android')
     {% if is_incremental() %}
-        AND EVENTTIME >= DATEADD(day, -35, CURRENT_TIMESTAMP())
+        AND EVENTTIME >= DATEADD(day, -370, CURRENT_TIMESTAMP())
     {% endif %}
     GROUP BY 1, 2, 3
 )
@@ -90,6 +97,13 @@ WITH user_installs AS (
         , u.PLATFORM
         , u.INSTALL_DATE
         , u.INSTALL_TIME
+
+        -- D1 Total Revenue
+        , SUM(CASE
+            WHEN r.EVENT_TIME <= DATEADD(day, 1, u.INSTALL_TIME)
+            THEN r.REVENUE
+            ELSE 0
+        END) AS D1_REVENUE
 
         -- D7 Total Revenue
         , SUM(CASE
@@ -105,10 +119,32 @@ WITH user_installs AS (
             ELSE 0
         END) AS D30_REVENUE
 
+        -- D180 Total Revenue
+        , SUM(CASE
+            WHEN r.EVENT_TIME <= DATEADD(day, 180, u.INSTALL_TIME)
+            THEN r.REVENUE
+            ELSE 0
+        END) AS D180_REVENUE
+
+        -- D365 Total Revenue
+        , SUM(CASE
+            WHEN r.EVENT_TIME <= DATEADD(day, 365, u.INSTALL_TIME)
+            THEN r.REVENUE
+            ELSE 0
+        END) AS D365_REVENUE
+
         -- Lifetime Total Revenue
         , SUM(COALESCE(r.REVENUE, 0)) AS TOTAL_REVENUE
 
-        -- Purchase Revenue (IAP, REVENUETYPE = 'direct')
+        -- D1 Purchase Revenue (IAP, REVENUETYPE = 'direct')
+        , SUM(CASE
+            WHEN r.EVENT_TIME <= DATEADD(day, 1, u.INSTALL_TIME)
+                AND r.REVENUE_TYPE = 'direct'
+            THEN r.REVENUE
+            ELSE 0
+        END) AS D1_PURCHASE_REVENUE
+
+        -- D7 Purchase Revenue
         , SUM(CASE
             WHEN r.EVENT_TIME <= DATEADD(day, 7, u.INSTALL_TIME)
                 AND r.REVENUE_TYPE = 'direct'
@@ -116,6 +152,7 @@ WITH user_installs AS (
             ELSE 0
         END) AS D7_PURCHASE_REVENUE
 
+        -- D30 Purchase Revenue
         , SUM(CASE
             WHEN r.EVENT_TIME <= DATEADD(day, 30, u.INSTALL_TIME)
                 AND r.REVENUE_TYPE = 'direct'
@@ -123,13 +160,38 @@ WITH user_installs AS (
             ELSE 0
         END) AS D30_PURCHASE_REVENUE
 
+        -- D180 Purchase Revenue
+        , SUM(CASE
+            WHEN r.EVENT_TIME <= DATEADD(day, 180, u.INSTALL_TIME)
+                AND r.REVENUE_TYPE = 'direct'
+            THEN r.REVENUE
+            ELSE 0
+        END) AS D180_PURCHASE_REVENUE
+
+        -- D365 Purchase Revenue
+        , SUM(CASE
+            WHEN r.EVENT_TIME <= DATEADD(day, 365, u.INSTALL_TIME)
+                AND r.REVENUE_TYPE = 'direct'
+            THEN r.REVENUE
+            ELSE 0
+        END) AS D365_PURCHASE_REVENUE
+
+        -- Lifetime Purchase Revenue
         , SUM(CASE
             WHEN r.REVENUE_TYPE = 'direct'
             THEN r.REVENUE
             ELSE 0
         END) AS TOTAL_PURCHASE_REVENUE
 
-        -- Ad Revenue (REVENUETYPE = 'indirect')
+        -- D1 Ad Revenue (REVENUETYPE = 'indirect')
+        , SUM(CASE
+            WHEN r.EVENT_TIME <= DATEADD(day, 1, u.INSTALL_TIME)
+                AND r.REVENUE_TYPE = 'indirect'
+            THEN r.REVENUE
+            ELSE 0
+        END) AS D1_AD_REVENUE
+
+        -- D7 Ad Revenue
         , SUM(CASE
             WHEN r.EVENT_TIME <= DATEADD(day, 7, u.INSTALL_TIME)
                 AND r.REVENUE_TYPE = 'indirect'
@@ -137,6 +199,7 @@ WITH user_installs AS (
             ELSE 0
         END) AS D7_AD_REVENUE
 
+        -- D30 Ad Revenue
         , SUM(CASE
             WHEN r.EVENT_TIME <= DATEADD(day, 30, u.INSTALL_TIME)
                 AND r.REVENUE_TYPE = 'indirect'
@@ -144,6 +207,23 @@ WITH user_installs AS (
             ELSE 0
         END) AS D30_AD_REVENUE
 
+        -- D180 Ad Revenue
+        , SUM(CASE
+            WHEN r.EVENT_TIME <= DATEADD(day, 180, u.INSTALL_TIME)
+                AND r.REVENUE_TYPE = 'indirect'
+            THEN r.REVENUE
+            ELSE 0
+        END) AS D180_AD_REVENUE
+
+        -- D365 Ad Revenue
+        , SUM(CASE
+            WHEN r.EVENT_TIME <= DATEADD(day, 365, u.INSTALL_TIME)
+                AND r.REVENUE_TYPE = 'indirect'
+            THEN r.REVENUE
+            ELSE 0
+        END) AS D365_AD_REVENUE
+
+        -- Lifetime Ad Revenue
         , SUM(CASE
             WHEN r.REVENUE_TYPE = 'indirect'
             THEN r.REVENUE
@@ -151,6 +231,13 @@ WITH user_installs AS (
         END) AS TOTAL_AD_REVENUE
 
         -- Payer flags (based on purchase revenue only)
+        , MAX(CASE
+            WHEN r.EVENT_TIME <= DATEADD(day, 1, u.INSTALL_TIME)
+                AND r.REVENUE_TYPE = 'direct'
+                AND r.REVENUE > 0
+            THEN 1 ELSE 0
+        END) AS IS_D1_PAYER
+
         , MAX(CASE
             WHEN r.EVENT_TIME <= DATEADD(day, 7, u.INSTALL_TIME)
                 AND r.REVENUE_TYPE = 'direct'
@@ -164,6 +251,20 @@ WITH user_installs AS (
                 AND r.REVENUE > 0
             THEN 1 ELSE 0
         END) AS IS_D30_PAYER
+
+        , MAX(CASE
+            WHEN r.EVENT_TIME <= DATEADD(day, 180, u.INSTALL_TIME)
+                AND r.REVENUE_TYPE = 'direct'
+                AND r.REVENUE > 0
+            THEN 1 ELSE 0
+        END) AS IS_D180_PAYER
+
+        , MAX(CASE
+            WHEN r.EVENT_TIME <= DATEADD(day, 365, u.INSTALL_TIME)
+                AND r.REVENUE_TYPE = 'direct'
+                AND r.REVENUE > 0
+            THEN 1 ELSE 0
+        END) AS IS_D365_PAYER
 
         , MAX(CASE
             WHEN r.REVENUE_TYPE = 'direct' AND r.REVENUE > 0
@@ -203,10 +304,24 @@ WITH user_installs AS (
             THEN 1 ELSE 0
         END) AS D30_RETAINED
 
+        -- D180 Retention
+        , MAX(CASE
+            WHEN s.SESSION_DATE = DATEADD(day, 180, u.INSTALL_DATE)
+            THEN 1 ELSE 0
+        END) AS D180_RETAINED
+
+        -- D365 Retention
+        , MAX(CASE
+            WHEN s.SESSION_DATE = DATEADD(day, 365, u.INSTALL_DATE)
+            THEN 1 ELSE 0
+        END) AS D365_RETAINED
+
         -- Maturity flags
         , CASE WHEN DATEDIFF(day, u.INSTALL_DATE, CURRENT_DATE()) >= 1 THEN 1 ELSE 0 END AS D1_MATURED
         , CASE WHEN DATEDIFF(day, u.INSTALL_DATE, CURRENT_DATE()) >= 7 THEN 1 ELSE 0 END AS D7_MATURED
         , CASE WHEN DATEDIFF(day, u.INSTALL_DATE, CURRENT_DATE()) >= 30 THEN 1 ELSE 0 END AS D30_MATURED
+        , CASE WHEN DATEDIFF(day, u.INSTALL_DATE, CURRENT_DATE()) >= 180 THEN 1 ELSE 0 END AS D180_MATURED
+        , CASE WHEN DATEDIFF(day, u.INSTALL_DATE, CURRENT_DATE()) >= 365 THEN 1 ELSE 0 END AS D365_MATURED
 
     FROM users_to_process u
     LEFT JOIN session_events s
@@ -224,32 +339,48 @@ SELECT
     , r.INSTALL_TIME
 
     -- Total Revenue metrics
+    , r.D1_REVENUE
     , r.D7_REVENUE
     , r.D30_REVENUE
+    , r.D180_REVENUE
+    , r.D365_REVENUE
     , r.TOTAL_REVENUE
 
     -- Purchase Revenue (IAP)
+    , r.D1_PURCHASE_REVENUE
     , r.D7_PURCHASE_REVENUE
     , r.D30_PURCHASE_REVENUE
+    , r.D180_PURCHASE_REVENUE
+    , r.D365_PURCHASE_REVENUE
     , r.TOTAL_PURCHASE_REVENUE
 
     -- Ad Revenue
+    , r.D1_AD_REVENUE
     , r.D7_AD_REVENUE
     , r.D30_AD_REVENUE
+    , r.D180_AD_REVENUE
+    , r.D365_AD_REVENUE
     , r.TOTAL_AD_REVENUE
 
     -- Payer flags
+    , r.IS_D1_PAYER
     , r.IS_D7_PAYER
     , r.IS_D30_PAYER
+    , r.IS_D180_PAYER
+    , r.IS_D365_PAYER
     , r.IS_PAYER
 
     -- Retention flags
     , COALESCE(t.D1_RETAINED, 0) AS D1_RETAINED
     , COALESCE(t.D7_RETAINED, 0) AS D7_RETAINED
     , COALESCE(t.D30_RETAINED, 0) AS D30_RETAINED
+    , COALESCE(t.D180_RETAINED, 0) AS D180_RETAINED
+    , COALESCE(t.D365_RETAINED, 0) AS D365_RETAINED
     , COALESCE(t.D1_MATURED, 0) AS D1_MATURED
     , COALESCE(t.D7_MATURED, 0) AS D7_MATURED
     , COALESCE(t.D30_MATURED, 0) AS D30_MATURED
+    , COALESCE(t.D180_MATURED, 0) AS D180_MATURED
+    , COALESCE(t.D365_MATURED, 0) AS D365_MATURED
 
 FROM user_revenue r
 LEFT JOIN user_retention t

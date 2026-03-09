@@ -49,7 +49,11 @@ models:
   - name: int_user_cohort__metrics
     description: |
       Comprehensive user-level cohort metrics with revenue windows and retention flags.
-      Joins Adjust installs with WGT.EVENTS data to calculate D7, D30, and lifetime revenue per user.
+      Joins Adjust installs with WGT.EVENTS data to calculate D1, D7, D30, D180, D365,
+      and lifetime revenue per user.
+
+      LTV windows: D1, D7, D30, D180, D365, Total
+      Revenue splits: Total, Purchase (direct), Ad (indirect)
 
       Grain: One row per user_id/platform combination
     data_tests:
@@ -82,16 +86,52 @@ models:
         description: Install date
       - name: INSTALL_TIME
         description: Install timestamp
+      - name: D1_REVENUE
+        description: Total revenue within 1 day of install
       - name: D7_REVENUE
         description: Total revenue within 7 days of install
       - name: D30_REVENUE
         description: Total revenue within 30 days of install
+      - name: D180_REVENUE
+        description: Total revenue within 180 days of install
+      - name: D365_REVENUE
+        description: Total revenue within 365 days of install
       - name: TOTAL_REVENUE
         description: Lifetime total revenue
+      - name: D1_PURCHASE_REVENUE
+        description: Purchase (IAP) revenue within 1 day of install
+      - name: D7_PURCHASE_REVENUE
+        description: Purchase (IAP) revenue within 7 days of install
+      - name: D30_PURCHASE_REVENUE
+        description: Purchase (IAP) revenue within 30 days of install
+      - name: D180_PURCHASE_REVENUE
+        description: Purchase (IAP) revenue within 180 days of install
+      - name: D365_PURCHASE_REVENUE
+        description: Purchase (IAP) revenue within 365 days of install
+      - name: TOTAL_PURCHASE_REVENUE
+        description: Lifetime purchase revenue
+      - name: D1_AD_REVENUE
+        description: Ad revenue within 1 day of install
+      - name: D7_AD_REVENUE
+        description: Ad revenue within 7 days of install
+      - name: D30_AD_REVENUE
+        description: Ad revenue within 30 days of install
+      - name: D180_AD_REVENUE
+        description: Ad revenue within 180 days of install
+      - name: D365_AD_REVENUE
+        description: Ad revenue within 365 days of install
+      - name: TOTAL_AD_REVENUE
+        description: Lifetime ad revenue
+      - name: IS_D1_PAYER
+        description: 1 if user made a purchase within 1 day, 0 otherwise
       - name: IS_D7_PAYER
         description: 1 if user made a purchase within 7 days, 0 otherwise
       - name: IS_D30_PAYER
         description: 1 if user made a purchase within 30 days, 0 otherwise
+      - name: IS_D180_PAYER
+        description: 1 if user made a purchase within 180 days, 0 otherwise
+      - name: IS_D365_PAYER
+        description: 1 if user made a purchase within 365 days, 0 otherwise
       - name: IS_PAYER
         description: 1 if user ever made a purchase, 0 otherwise
       - name: D1_RETAINED
@@ -100,3 +140,17 @@ models:
         description: 1 if user had a session on D7, 0 otherwise
       - name: D30_RETAINED
         description: 1 if user had a session on D30, 0 otherwise
+      - name: D180_RETAINED
+        description: 1 if user had a session on D180, 0 otherwise
+      - name: D365_RETAINED
+        description: 1 if user had a session on D365, 0 otherwise
+      - name: D1_MATURED
+        description: 1 if user has been installed for at least 1 day
+      - name: D7_MATURED
+        description: 1 if user has been installed for at least 7 days
+      - name: D30_MATURED
+        description: 1 if user has been installed for at least 30 days
+      - name: D180_MATURED
+        description: 1 if user has been installed for at least 180 days
+      - name: D365_MATURED
+        description: 1 if user has been installed for at least 365 days

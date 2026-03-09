@@ -1,0 +1,84 @@
+version: 2
+
+models:
+  - name: mart_ltv__cohort_summary
+    description: |
+      Classic cohort LTV summary — works for both iOS and Android.
+      Groups users by install cohort and acquisition source, then calculates
+      aggregate LTV, payer rates, and retention across all standard windows.
+
+      Uses Amplitude user-level attribution path (not device-level MTA),
+      so coverage is available for both platforms.
+
+      LTV windows: D1, D7, D30, D180, D365, Total
+      Revenue splits: Total, Purchase (direct), Ad (indirect)
+
+      Grain: One row per INSTALL_DATE + AD_PARTNER + NETWORK_NAME + CAMPAIGN_NAME + PLATFORM
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - INSTALL_DATE
+              - AD_PARTNER
+              - NETWORK_NAME
+              - CAMPAIGN_NAME
+              - PLATFORM
+          config:
+            where: "INSTALL_DATE >= DATEADD(day, -60, CURRENT_DATE)"
+    columns:
+      - name: INSTALL_DATE
+        description: Cohort install date
+      - name: INSTALL_WEEK
+        description: Install week (date_trunc)
+      - name: INSTALL_MONTH
+        description: Install month (date_trunc)
+      - name: AD_PARTNER
+        description: Standardized partner name (Meta, Google, TikTok, etc.)
+      - name: NETWORK_NAME
+        description: Raw network name from Adjust
+      - name: CAMPAIGN_NAME
+        description: Campaign name from Adjust
+      - name: PLATFORM
+        description: iOS or Android
+      - name: COHORT_SIZE
+        description: Number of users in this cohort
+      - name: D1_REVENUE
+        description: Total revenue within 1 day of install
+      - name: D7_REVENUE
+        description: Total revenue within 7 days of install
+      - name: D30_REVENUE
+        description: Total revenue within 30 days of install
+      - name: D180_REVENUE
+        description: Total revenue within 180 days of install
+      - name: D365_REVENUE
+        description: Total revenue within 365 days of install
+      - name: TOTAL_REVENUE
+        description: Lifetime total revenue
+      - name: D1_LTV
+        description: D1 revenue per matured user (NULL if no users matured to D1)
+      - name: D7_LTV
+        description: D7 revenue per matured user (NULL if no users matured to D7)
+      - name: D30_LTV
+        description: D30 revenue per matured user (NULL if no users matured to D30)
+      - name: D180_LTV
+        description: D180 revenue per matured user (NULL if no users matured to D180)
+      - name: D365_LTV
+        description: D365 revenue per matured user (NULL if no users matured to D365)
+      - name: TOTAL_LTV
+        description: Lifetime revenue per user
+      - name: D1_MATURED_USERS
+        description: Users who have been installed for at least 1 day
+      - name: D30_MATURED_USERS
+        description: Users who have been installed for at least 30 days
+      - name: D365_MATURED_USERS
+        description: Users who have been installed for at least 365 days
+      - name: D7_PAYER_RATE
+        description: Fraction of D7-matured users who made a purchase within 7 days
+      - name: D30_PAYER_RATE
+        description: Fraction of D30-matured users who made a purchase within 30 days
+      - name: D1_RETENTION_RATE
+        description: Fraction of D1-matured users who had a session on D1
+      - name: D7_RETENTION_RATE
+        description: Fraction of D7-matured users who had a session on D7
+      - name: D30_RETENTION_RATE
+        description: Fraction of D30-matured users who had a session on D30
