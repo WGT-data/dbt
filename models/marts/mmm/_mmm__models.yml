@@ -25,13 +25,13 @@ models:
           - not_null
           - accepted_values:
               arguments:
-                values: ['iOS', 'Android', 'All']
+                values: ['iOS', 'Android', 'Desktop', 'All']
       - name: CHANNEL
         description: "Standardized ad partner name (Meta, Google, TikTok, etc.)"
         data_tests:
           - not_null
       - name: SPEND
-        description: "Marketing spend (from Supermetrics), 0 if no spend"
+        description: "Marketing spend, 0 if no spend"
       - name: INSTALLS
         description: "Device-level installs (from Adjust S3), 0 if no installs"
       - name: REVENUE
@@ -65,12 +65,12 @@ models:
         data_tests:
           - not_null
       - name: PLATFORM
-        description: "iOS, Android, or All (for spend sources without platform breakdown)"
+        description: "iOS, Android, Desktop, or All (for spend sources without platform breakdown)"
         data_tests:
           - not_null
           - accepted_values:
               arguments:
-                values: ['iOS', 'Android', 'All']
+                values: ['iOS', 'Android', 'Desktop', 'All']
       - name: CHANNEL
         description: "Standardized ad partner name"
         data_tests:

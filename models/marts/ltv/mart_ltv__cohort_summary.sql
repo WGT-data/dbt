@@ -148,13 +148,15 @@ WITH attribution AS (
 )
 
 -- Aggregate by cohort dimensions
+-- COALESCE nullable attribution columns to sentinel values — Snowflake MERGE
+-- treats NULL ≠ NULL, which causes duplicate row insertion on incremental runs
 SELECT
     INSTALL_DATE
     , DATE_TRUNC('week', INSTALL_DATE) AS INSTALL_WEEK
     , DATE_TRUNC('month', INSTALL_DATE) AS INSTALL_MONTH
-    , AD_PARTNER
-    , NETWORK_NAME
-    , CAMPAIGN_NAME
+    , COALESCE(AD_PARTNER, '__none__') AS AD_PARTNER
+    , COALESCE(NETWORK_NAME, '__none__') AS NETWORK_NAME
+    , COALESCE(CAMPAIGN_NAME, '__none__') AS CAMPAIGN_NAME
     , PLATFORM
 
     -- Cohort size

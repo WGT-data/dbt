@@ -8,7 +8,7 @@
 
 ## Executive Summary
 
-All 59 models audited. **Raw-to-staging integrity is perfect across all sources** — zero deltas on spend, installs, and revenue for both validation windows. Intermediate and mart models reconcile correctly against their upstream sources, with differences explained by documented dedup logic, incremental materialization windows, or intentional metric definition choices.
+All 62 models audited. **Raw-to-staging integrity is perfect across all sources** — zero deltas on spend, installs, and revenue for both validation windows. Intermediate and mart models reconcile correctly against their upstream sources, with differences explained by documented dedup logic, incremental materialization windows, or intentional metric definition choices.
 
 **Key findings**:
 1. All staging models pass 1:1 validation against raw source tables (zero deltas)
@@ -66,9 +66,11 @@ All 59 models audited. **Raw-to-staging integrity is perfect across all sources*
 ---
 
 ### v_stg_facebook_spend
-**Source(s):** `FIVETRAN_DATABASE.FACEBOOK_ADS.ADS_INSIGHTS`
+**Source(s):** `FIVETRAN_DATABASE.FACEBOOK_ADS.ADS_INSIGHTS` (via `_facebook__sources.yml`)
 **Grain:** DATE / ACCOUNT / CAMPAIGN / ADSET / AD / AD_ID / COUNTRY (aggregated from raw)
 **Transformation:** Joins to lookup tables (accounts, campaigns, adsets, ads), country_codes seed. SUM(SPEND), SUM(IMPRESSIONS), SUM(INLINE_LINK_CLICKS).
+
+> **Update 2026-03-09:** All 7 Facebook staging models now use `{{ source('facebook_ads', ...) }}` refs instead of hardcoded database paths. A new `_facebook__sources.yml` file defines the `FIVETRAN_DATABASE.FACEBOOK_ADS` source, closing the previously documented source YAML gap.
 
 | Metric | Window | Source Value | Model Value | Delta | Delta % | Status |
 |--------|--------|-------------|-------------|-------|---------|--------|
@@ -239,6 +241,8 @@ All 59 models audited. **Raw-to-staging integrity is perfect across all sources*
 **Source(s):** `stg_adjust__report_daily` (mobile) + `WGT.EVENTS.REVENUE` (desktop, via web MTA)
 **Grain:** DATE + PLATFORM + CHANNEL
 
+> **Update 2026-03-09:** Now includes Desktop platform revenue (from `WGT.EVENTS.REVENUE` allocated via web MTA channel weights). Previously mobile-only.
+
 | Metric | Window | MMM Revenue | Adjust Revenue | Delta | Status |
 |--------|--------|------------|----------------|-------|--------|
 | SUM(REVENUE) mobile | Recent | $958,697.80 | $1,036,378.00 | -$77,680.20 | ⚠️ |
@@ -266,6 +270,8 @@ All 59 models audited. **Raw-to-staging integrity is perfect across all sources*
 ### int_ltv__device_revenue
 **Source(s):** `v_stg_adjust__installs`, `int_adjust_amplitude__device_mapping`, `WGT.EVENTS.REVENUE`
 **Grain:** DEVICE_ID + PLATFORM
+
+> **Update 2026-03-09:** Device mapping is now deduplicated to 1 user per device+platform (previously could return multiple users). This fixed 310 duplicate rows that caused fan-out in downstream joins.
 
 **5-device sample (most recent with revenue):**
 
@@ -459,6 +465,63 @@ Thin pass-through with DIVIDEND-based spend deallocation. Source validated throu
 
 ---
 
+### mart_skan__campaign_performance
+**Source(s):** `int_skan__aggregate_attribution`, `stg_adjust__report_daily`, `network_mapping`
+**Grain:** AD_PARTNER + CAMPAIGN_NAME + INSTALL_DATE + COUNTRY
+**Purpose:** Standalone SKAN mart joining SKAdNetwork postback data with iOS spend. Provides SKAN-specific metrics: conversion value distributions, fidelity types (StoreKit-rendered vs view-through), win rates, and efficiency metrics (SKAN CPI, CPM, CTR, CVR). Country inferred from campaign name patterns. SANs (Meta, Google) aggregated to partner/date level with campaign = '__none__'.
+
+**Materialization:** incremental (merge)
+
+| Check | Status |
+|-------|--------|
+| Builds without error | ✅ |
+| Upstream SKAN data validated | ✅ (via `int_skan__aggregate_attribution`) |
+| Upstream spend validated | ✅ (via `stg_adjust__report_daily`) |
+| Spend join on partner/campaign/date/country | ✅ |
+
+**Note:** New model — no pre-existing data to reconcile against. Validated through upstream model chain.
+**Status:** ✅ Verified (via upstream)
+
+---
+
+### mart_attribution__combined
+**Source(s):** `mta__campaign_performance`, `rpt__web_attribution`
+**Grain:** DATE + ACQUISITION_TYPE + CHANNEL + CAMPAIGN + PLATFORM
+**Purpose:** Stacked UNION ALL of mobile MTA (app installs) and web MTA (registrations) into a single table with aligned columns. ACQUISITION_TYPE distinguishes 'mobile_install' vs 'web_registration'. Both pipelines use the same 5 MTA models. Conversions are NOT deduplicated between web and mobile. Spend is mobile-only. Includes CPI and ROAS computed from recommended (time-decay) model.
+
+**Materialization:** table
+
+| Check | Status |
+|-------|--------|
+| Builds without error | ✅ |
+| Mobile columns from `mta__campaign_performance` | ✅ Verified |
+| Web columns from `rpt__web_attribution` | ✅ Verified |
+| UNION ALL column alignment | ✅ (30 columns matched) |
+
+**Note:** New model — validated through upstream model chain.
+**Status:** ✅ Verified (via upstream)
+
+---
+
+### mart_blended_performance
+**Source(s):** `mta__campaign_performance`, `rpt__web_attribution`
+**Grain:** DATE + CHANNEL + CAMPAIGN
+**Purpose:** Blended web+mobile performance view. Full outer joins mobile spend/installs with web sessions/registrations at channel+campaign grain. Computes blended efficiency metrics (BLENDED_CPA, BLENDED_D7_ROAS, BLENDED_D30_ROAS, BLENDED_TOTAL_ROAS) that account for web value driven by mobile ad spend. Includes HAS_MOBILE_DATA / HAS_WEB_DATA flags for filtering.
+
+**Materialization:** table
+
+| Check | Status |
+|-------|--------|
+| Builds without error | ✅ |
+| Mobile metrics from `mta__campaign_performance` | ✅ Verified |
+| Web metrics from `rpt__web_attribution` | ✅ Verified |
+| FULL OUTER JOIN on channel+campaign+date | ✅ |
+
+**Note:** New model — validated through upstream model chain.
+**Status:** ✅ Verified (via upstream)
+
+---
+
 ### mmm__weekly_channel_summary
 **Source(s):** `mmm__daily_channel_summary`
 Simple weekly rollup — sums daily values by ISO week. Validated through daily summary (✅).
@@ -468,6 +531,9 @@ Simple weekly rollup — sums daily values by ISO week. Validated through daily 
 
 ### mart_daily_overview_by_platform_measures / mart_exec_summary_measures
 Power BI scaffold tables — single-row anchor or pass-through view. No data transformation to audit.
+
+> **Update 2026-03-09:** `mart_exec_summary_measures` — removed invalid CAMPAIGN_ID column (not additive), fixed TOTAL_REVENUE column to reference ADJUST_ALL_REVENUE (was incorrectly referencing non-existent TOTAL_REVENUE).
+
 **Status:** ✅ N/A (scaffold tables)
 
 ---
@@ -507,6 +573,9 @@ Power BI scaffold tables — single-row anchor or pass-through view. No data tra
 | `mta__campaign_ltv` | Mart | ⚠️ Expected | MTA coverage limited by touchpoint data, not mapping |
 | `rpt__mta_vs_adjust_installs` | Mart | ✅ N/A | Audit model |
 | `rpt__web_attribution` | Mart | ✅ Verified | Via upstream |
+| `mart_skan__campaign_performance` | Mart | ✅ Verified | Via upstream (SKAN + spend) |
+| `mart_attribution__combined` | Mart | ✅ Verified | Via upstream (mobile + web MTA) |
+| `mart_blended_performance` | Mart | ✅ Verified | Via upstream (mobile + web blended) |
 | `mart_ltv__cohort_summary` | Mart | ✅ Verified | Revenue exact match; 440 user delta explained |
 | `mmm__daily_channel_summary` | Mart | ✅ Verified | Historical exact; date spine complete |
 | `mmm__weekly_channel_summary` | Mart | ✅ Verified | Via upstream |
@@ -558,8 +627,9 @@ Power BI scaffold tables — single-row anchor or pass-through view. No data tra
 | 2 | MTA touchpoint coverage ~4.5% of installs | SANs (Meta, Google, Apple, TikTok) don't share touchpoint data; device mapping itself is comprehensive (5.9M mappings, refreshed 2026-03-03) | Structural — MMM recommended for budget allocation |
 | 3 | Android S3 data unavailable before 2025 | Historical Android installs only via API, not device-level | Documented — no remediation needed |
 | 4 | 43% of desktop revenue unattributed | Legacy + Steam/Amazon users without web session trail | Structurally correct — no web session data exists |
-| 5 | CPI varies 66% across marts | Different install denominators by design | Documented in metric definitions above |
-| 6 | Recent window deltas (~6%) on incremental models | Last 2-3 days not yet materialized | Normal — resolves on next `dbt run` |
+| 5 | ~~No Facebook source YAML~~ | ~~Manual SQL updates needed for DB changes~~ | ✅ **Resolved** — `_facebook__sources.yml` added; all 7 FB models now use `{{ source() }}` refs |
+| 6 | CPI varies 66% across marts | Different install denominators by design | Documented in metric definitions above |
+| 7 | Recent window deltas (~6%) on incremental models | Last 2-3 days not yet materialized | Normal — resolves on next `dbt run` |
 
 ---
 

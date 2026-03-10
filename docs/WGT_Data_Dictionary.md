@@ -3,7 +3,7 @@
 **Project**: wgt-dbt
 **Platform**: Snowflake + dbt
 **Last Updated**: 2026-03-09
-**Total Models**: 59 SQL models + 2 seeds
+**Total Models**: 62 SQL models + 2 seeds
 
 ---
 
@@ -222,7 +222,7 @@ MARTS
 
 ### 2.6 FIVETRAN_DATABASE.FACEBOOK_ADS — ADS_INSIGHTS
 
-**Description**: Facebook Ads performance metrics by date/ad, synced via Fivetran. Contains WGT's web/desktop Facebook ad account data. No source YAML — referenced directly via hardcoded database path.
+**Description**: Facebook Ads performance metrics by date/ad, synced via Fivetran. Contains WGT's web/desktop Facebook ad account data. Referenced via `{{ source('facebook_ads', 'ADS_INSIGHTS') }}` defined in `_facebook__sources.yml`.
 
 | Column | Type | Description |
 |---|---|---|
@@ -484,7 +484,7 @@ These models are pure partitions of the monolithic `IOS_EVENTS` and `ANDROID_EVE
 
 **Grain**: DATE / ACCOUNT_ID / CAMPAIGN_ID / ADSET_ID / AD_ID / COUNTRY_CODE
 
-**Source**: `FIVETRAN_DATABASE.FACEBOOK_ADS.ADS_INSIGHTS` (hardcoded — no source YAML)
+**Source**: `{{ source('facebook_ads', 'ADS_INSIGHTS') }}` (via `_facebook__sources.yml`)
 
 **Materialization**: view
 
@@ -533,7 +533,7 @@ These models are pure partitions of the monolithic `IOS_EVENTS` and `ANDROID_EVE
 
 **Purpose**: Helper view counting distinct action types per ad/date combination. Feeds the DIVIDEND calculation in `v_stg_facebook_conversions`.
 
-**Known Caveats**: No `_sources.yml` exists for Facebook Ads — all table references are hardcoded to `FIVETRAN_DATABASE.FACEBOOK_ADS.*`. If the Fivetran destination changes, these staging models must be manually updated.
+**Source Configuration**: All 7 Facebook staging models now use `{{ source('facebook_ads', ...) }}` refs defined in `_facebook__sources.yml`. The source points to `FIVETRAN_DATABASE.FACEBOOK_ADS`. If the Fivetran destination changes, update the source YAML — no model SQL changes required.
 
 ---
 
@@ -746,7 +746,7 @@ These models are pure partitions of the monolithic `IOS_EVENTS` and `ANDROID_EVE
 
 #### `int_mmm__daily_channel_revenue`
 
-**Purpose**: Constructs channel-attributed revenue for MMM. Mobile revenue comes from `stg_adjust__report_daily`. Desktop revenue from `WGT.EVENTS.REVENUE` is allocated to channels using web MTA channel weights.
+**Purpose**: Constructs channel-attributed revenue for MMM. Mobile revenue comes from `stg_adjust__report_daily`. Desktop revenue from `WGT.EVENTS.REVENUE` is allocated to channels using web MTA channel weights. Now includes all three platform types (iOS, Android, Desktop).
 
 **Grain**: DATE / PLATFORM / CHANNEL
 
@@ -762,7 +762,7 @@ These models are pure partitions of the monolithic `IOS_EVENTS` and `ANDROID_EVE
 | REVENUE | NUMBER | Direct (IAP) revenue |
 | AD_REVENUE | NUMBER | In-app advertising revenue |
 
-**Key Business Logic**: Desktop revenue is not directly channel-attributed by Adjust, so it is allocated proportionally using web MTA credit weights from `int_web_mta__touchpoint_credit`.
+**Key Business Logic**: Mobile (iOS/Android) revenue comes from Adjust API. Desktop revenue from `WGT.EVENTS.REVENUE` is allocated proportionally to channels using web MTA credit weights from `int_web_mta__touchpoint_credit`.
 
 ---
 
@@ -1064,7 +1064,7 @@ These models are pure partitions of the monolithic `IOS_EVENTS` and `ANDROID_EVE
 
 #### `int_ltv__device_revenue`
 
-**Purpose**: Bridges Adjust device installs to user-level revenue via the device mapping table. Produces D1/D7/D30/D180/D365/Total revenue windows per device/install, with a flag indicating whether a user mapping was found.
+**Purpose**: Bridges Adjust device installs to user-level revenue via the device mapping table. Produces D1/D7/D30/D180/D365/Total revenue windows per device/install, with a flag indicating whether a user mapping was found. Device mapping is deduplicated to 1 user per device+platform to prevent fan-out in downstream joins.
 
 **Grain**: DEVICE_ID / PLATFORM / INSTALL_TIMESTAMP
 
@@ -1077,7 +1077,7 @@ These models are pure partitions of the monolithic `IOS_EVENTS` and `ANDROID_EVE
 | DEVICE_ID | VARCHAR | Adjust device identifier |
 | PLATFORM | VARCHAR | 'iOS' or 'Android' |
 | INSTALL_TIMESTAMP | TIMESTAMP | Install timestamp |
-| USER_ID | VARCHAR | Mapped user ID (NULL if no mapping) |
+| USER_ID | VARCHAR | Mapped user ID (NULL if no mapping) — deduplicated to 1 per device+platform |
 | HAS_USER_MAPPING | BOOLEAN | TRUE if device was matched to a user |
 | D1_REVENUE | NUMBER | Revenue within 1 day of install |
 | D7_REVENUE | NUMBER | Revenue within 7 days of install |
@@ -1086,7 +1086,7 @@ These models are pure partitions of the monolithic `IOS_EVENTS` and `ANDROID_EVE
 | D365_REVENUE | NUMBER | Revenue within 365 days of install |
 | TOTAL_REVENUE | NUMBER | Lifetime revenue post-install |
 
-**Known Caveats**: This model has never been deployed to production. It inherits all limitations of `int_adjust_amplitude__device_mapping` — Android 0% match, iOS limited to IDFV. As of November 2025, the model is stale.
+**Known Caveats**: Inherits all limitations of `int_adjust_amplitude__device_mapping` — Android 0% match, iOS limited to IDFV. Device mapping dedup (added 2026-03-09) fixed 310 duplicate rows that were causing fan-out.
 
 ---
 
@@ -1197,6 +1197,27 @@ These models are pure partitions of the monolithic `IOS_EVENTS` and `ANDROID_EVE
 **Source**: `mart_exec_summary`
 
 **Materialization**: view
+
+| Column | Type | Description |
+|---|---|---|
+| DATE | DATE | Report date |
+| AD_PARTNER | VARCHAR | Standardized partner label |
+| CAMPAIGN | VARCHAR | Campaign name |
+| PLATFORM | VARCHAR | 'iOS' or 'Android' |
+| COUNTRY | VARCHAR | Country |
+| SPEND | NUMBER | Adjust API NETWORK_COST |
+| API_INSTALLS | NUMBER | Adjust API installs |
+| SKAN_INSTALLS | NUMBER | SKAN installs |
+| ATTRIBUTION_INSTALLS | NUMBER | All attribution installs |
+| D7_REVENUE | NUMBER | Cohort D7 revenue |
+| D30_REVENUE | NUMBER | Cohort D30 revenue |
+| ADJUST_ALL_REVENUE | NUMBER | Adjust API ALL_REVENUE (IAP + ad) |
+| DATE_YEAR | NUMBER | Year |
+| DATE_QUARTER | NUMBER | Quarter |
+| DATE_MONTH | NUMBER | Month |
+| DATE_WEEK | DATE | Week start |
+
+**Update 2026-03-09:** Removed invalid CAMPAIGN_ID column (not additive — breaks DAX aggregation). Fixed TOTAL_REVENUE → ADJUST_ALL_REVENUE to correctly reference the upstream column.
 
 ---
 
@@ -1508,6 +1529,168 @@ These models are pure partitions of the monolithic `IOS_EVENTS` and `ANDROID_EVE
 
 ---
 
+### 5.9 SKAN, Combined Attribution & Blended Performance
+
+#### `mart_skan__campaign_performance`
+
+**Purpose**: Standalone SKAN campaign performance mart joining SKAdNetwork postback data with Adjust API spend data for iOS. Provides SKAN-specific metrics including conversion value distributions, fidelity types (StoreKit-rendered vs view-through), win rates, and efficiency metrics (SKAN CPI, CPM, CTR, CVR). Country is inferred from campaign name patterns. Self-attributing networks (Meta, Google) are aggregated to partner/date level with campaign = '__none__'.
+
+**Grain**: AD_PARTNER + CAMPAIGN_NAME + INSTALL_DATE + COUNTRY
+
+**Sources**: `int_skan__aggregate_attribution`, `stg_adjust__report_daily`, `network_mapping`
+
+**Materialization**: incremental (merge)
+
+| Column | Type | Description |
+|---|---|---|
+| INSTALL_DATE | DATE | SKAN install date |
+| AD_PARTNER | VARCHAR | Standardized partner name (Meta, Google, AppLovin, etc.) |
+| CAMPAIGN_NAME | VARCHAR | Campaign name from SKAN postback. '__none__' for SANs |
+| COUNTRY | VARCHAR | Country inferred from campaign name patterns. 'unknown' when not extractable |
+| COST | NUMBER | iOS ad spend from Adjust API |
+| CLICKS | NUMBER | Ad clicks |
+| IMPRESSIONS | NUMBER | Ad impressions |
+| ADJUST_INSTALLS | NUMBER | Adjust API installs (iOS only) |
+| SKAN_INSTALL_COUNT | NUMBER | Total SKAN installs (new + redownloads) |
+| SKAN_NEW_INSTALLS | NUMBER | SKAN new install count (excludes redownloads) |
+| SKAN_REDOWNLOADS | NUMBER | SKAN redownload count |
+| SKAN_CPI | NUMBER | Cost per SKAN new install (COST / SKAN_NEW_INSTALLS) |
+| CPM | NUMBER | Cost per thousand impressions |
+| CTR | NUMBER | Click-through rate (CLICKS / IMPRESSIONS) |
+| SKAN_CVR | NUMBER | SKAN conversion rate (SKAN_NEW_INSTALLS / CLICKS) |
+| WIN_RATE | NUMBER | Fraction of postbacks where this network won SKAN attribution |
+| STOREKIT_RENDERED_RATE | NUMBER | Fraction of installs that were StoreKit-rendered (high fidelity) |
+| VIEW_THROUGH_RATE | NUMBER | Fraction of installs that were view-through (low fidelity) |
+| CV_COVERAGE_RATE | NUMBER | Fraction of installs with a non-null conversion value |
+| AVG_CONVERSION_VALUE | NUMBER | Average SKAN conversion value (proxy for engagement quality) |
+| MAX_CONVERSION_VALUE | NUMBER | Maximum SKAN conversion value |
+| INSTALLS_WITH_CV | NUMBER | Count of installs with a conversion value |
+| CV_BUCKET_0 | NUMBER | Installs with conversion value = 0 |
+| CV_BUCKET_1_10 | NUMBER | Installs with conversion value 1-10 |
+| CV_BUCKET_11_20 | NUMBER | Installs with conversion value 11-20 |
+| CV_BUCKET_21_40 | NUMBER | Installs with conversion value 21-40 |
+| CV_BUCKET_41_63 | NUMBER | Installs with conversion value 41-63 |
+| STOREKIT_RENDERED_COUNT | NUMBER | Raw count of StoreKit-rendered installs |
+| VIEW_THROUGH_COUNT | NUMBER | Raw count of view-through installs |
+| WINNING_POSTBACKS | NUMBER | Count of winning SKAN postbacks |
+| SKAN_V3_COUNT | NUMBER | SKAN version 3 postback count |
+| SKAN_V4_COUNT | NUMBER | SKAN version 4 postback count |
+
+**SKAN Limitations**:
+- No device identifiers — cannot join to individual users or revenue
+- SKAN 3.0: campaign-level only (no adgroup/creative granularity)
+- SANs (Meta, Google): campaign names don't match Adjust API spend data — aggregated to partner/date level
+- Conversion values are a proxy for engagement, not actual revenue
+
+---
+
+#### `mart_attribution__combined`
+
+**Purpose**: Combined web + mobile multi-touch attribution view. Stacks mobile MTA (app installs from `mta__campaign_performance`) and web MTA (registrations from `rpt__web_attribution`) into a single table with aligned columns using UNION ALL. Use ACQUISITION_TYPE to filter: 'mobile_install' or 'web_registration'. Both pipelines use the same 5 MTA models. Conversions are NOT deduplicated between web and mobile. Spend is mobile-only.
+
+**Grain**: DATE + ACQUISITION_TYPE + CHANNEL + CAMPAIGN + PLATFORM
+
+**Sources**: `mta__campaign_performance`, `rpt__web_attribution`
+
+**Materialization**: table
+
+| Column | Type | Description |
+|---|---|---|
+| DATE | DATE | Install date (mobile) or session date (web) |
+| ACQUISITION_TYPE | VARCHAR | 'mobile_install' or 'web_registration' |
+| CHANNEL | VARCHAR | AD_PARTNER for mobile, TRAFFIC_SOURCE for web |
+| CAMPAIGN | VARCHAR | Campaign name (mobile) or utm_campaign (web) |
+| PLATFORM | VARCHAR | iOS/Android for mobile, 'Web' for web |
+| COST | NUMBER | Ad spend (mobile only; 0 for web) |
+| IMPRESSIONS | NUMBER | Ad impressions (mobile only; 0 for web) |
+| CLICKS | NUMBER | Ad clicks (mobile only; 0 for web) |
+| CONVERSIONS_LAST_TOUCH | NUMBER | Attributed conversions — last touch |
+| CONVERSIONS_FIRST_TOUCH | NUMBER | Attributed conversions — first touch |
+| CONVERSIONS_LINEAR | NUMBER | Attributed conversions — linear |
+| CONVERSIONS_TIME_DECAY | NUMBER | Attributed conversions — time decay |
+| CONVERSIONS_POSITION_BASED | NUMBER | Attributed conversions — position based |
+| CONVERSIONS_RECOMMENDED | NUMBER | Attributed conversions — recommended model (time-decay for both) |
+| D7_REVENUE_LAST_TOUCH | NUMBER | 7-day revenue — last touch |
+| D7_REVENUE_FIRST_TOUCH | NUMBER | 7-day revenue — first touch |
+| D7_REVENUE_LINEAR | NUMBER | 7-day revenue — linear |
+| D7_REVENUE_TIME_DECAY | NUMBER | 7-day revenue — time decay |
+| D7_REVENUE_POSITION_BASED | NUMBER | 7-day revenue — position based |
+| D7_REVENUE_RECOMMENDED | NUMBER | 7-day revenue — recommended model |
+| D30_REVENUE_LAST_TOUCH | NUMBER | 30-day revenue — last touch |
+| D30_REVENUE_FIRST_TOUCH | NUMBER | 30-day revenue — first touch |
+| D30_REVENUE_LINEAR | NUMBER | 30-day revenue — linear |
+| D30_REVENUE_TIME_DECAY | NUMBER | 30-day revenue — time decay |
+| D30_REVENUE_POSITION_BASED | NUMBER | 30-day revenue — position based |
+| D30_REVENUE_RECOMMENDED | NUMBER | 30-day revenue — recommended model |
+| TOTAL_REVENUE_LAST_TOUCH | NUMBER | Lifetime revenue — last touch |
+| TOTAL_REVENUE_FIRST_TOUCH | NUMBER | Lifetime revenue — first touch |
+| TOTAL_REVENUE_LINEAR | NUMBER | Lifetime revenue — linear |
+| TOTAL_REVENUE_TIME_DECAY | NUMBER | Lifetime revenue — time decay |
+| TOTAL_REVENUE_POSITION_BASED | NUMBER | Lifetime revenue — position based |
+| TOTAL_REVENUE_RECOMMENDED | NUMBER | Lifetime revenue — recommended model |
+| UNIQUE_USERS | NUMBER | Unique devices (mobile) or unique registrants (web) |
+| CPI_RECOMMENDED | NUMBER | Cost per conversion — recommended model. Mobile only (NULL for web) |
+| D7_ROAS_RECOMMENDED | NUMBER | D7 ROAS — recommended model. Mobile only |
+| D30_ROAS_RECOMMENDED | NUMBER | D30 ROAS — recommended model. Mobile only |
+| TOTAL_ROAS_RECOMMENDED | NUMBER | Lifetime ROAS — recommended model. Mobile only |
+
+**Key Business Logic**:
+- Mobile conversions = fractional installs; Web conversions = fractional registrations
+- Web has no RECOMMENDED model — uses time-decay as the recommended default
+- Spend, impressions, clicks are 0 for web rows (web spend not tracked at campaign level)
+- CPI/ROAS metrics are NULL for web rows
+
+---
+
+#### `mart_blended_performance`
+
+**Purpose**: Blended web + mobile performance view aggregated to channel/campaign/date. Full outer joins mobile spend/installs (from `mta__campaign_performance`) with web sessions/registrations (from `rpt__web_attribution`). Computes blended efficiency metrics that account for web value driven by mobile ad spend. Unlike `mart_attribution__combined` (separate rows per acquisition type), this model aggregates both pipelines into a single row per channel+campaign+date.
+
+**Grain**: DATE + CHANNEL + CAMPAIGN
+
+**Sources**: `mta__campaign_performance`, `rpt__web_attribution`
+
+**Materialization**: table
+
+| Column | Type | Description |
+|---|---|---|
+| DATE | DATE | Event date |
+| CHANNEL | VARCHAR | Unified channel name (AD_PARTNER for mobile, TRAFFIC_SOURCE for web) |
+| CAMPAIGN | VARCHAR | Campaign name |
+| TOTAL_SPEND | NUMBER | Total ad spend (mobile only) |
+| TOTAL_CONVERSIONS | NUMBER | Mobile installs + web registrations (time-decay) |
+| TOTAL_D7_REVENUE | NUMBER | Mobile + web 7-day revenue (time-decay) |
+| TOTAL_D30_REVENUE | NUMBER | Mobile + web 30-day revenue (time-decay) |
+| TOTAL_REVENUE | NUMBER | Mobile + web lifetime revenue (time-decay) |
+| BLENDED_CPA | NUMBER | TOTAL_SPEND / TOTAL_CONVERSIONS |
+| BLENDED_D7_ROAS | NUMBER | TOTAL_D7_REVENUE / TOTAL_SPEND |
+| BLENDED_D30_ROAS | NUMBER | TOTAL_D30_REVENUE / TOTAL_SPEND |
+| BLENDED_TOTAL_ROAS | NUMBER | TOTAL_REVENUE / TOTAL_SPEND |
+| MOBILE_SPEND | NUMBER | Mobile ad spend |
+| MOBILE_IMPRESSIONS | NUMBER | Mobile ad impressions |
+| MOBILE_CLICKS | NUMBER | Mobile ad clicks |
+| MOBILE_INSTALLS | NUMBER | Mobile installs (time-decay) |
+| MOBILE_D7_REVENUE | NUMBER | Mobile 7-day revenue |
+| MOBILE_D30_REVENUE | NUMBER | Mobile 30-day revenue |
+| MOBILE_TOTAL_REVENUE | NUMBER | Mobile lifetime revenue |
+| MOBILE_UNIQUE_DEVICES | NUMBER | Mobile unique devices |
+| WEB_SESSIONS | NUMBER | Web sessions (anonymous + identified) |
+| WEB_UNIQUE_DEVICES | NUMBER | Web unique devices |
+| WEB_REGISTRATIONS | NUMBER | Web registrations (time-decay) |
+| WEB_D7_REVENUE | NUMBER | Web 7-day post-registration revenue |
+| WEB_D30_REVENUE | NUMBER | Web 30-day post-registration revenue |
+| WEB_TOTAL_REVENUE | NUMBER | Web lifetime post-registration revenue |
+| WEB_PAYERS | NUMBER | Web payers |
+| HAS_MOBILE_DATA | BOOLEAN | TRUE if row has mobile install or spend data |
+| HAS_WEB_DATA | BOOLEAN | TRUE if row has web session or registration data |
+
+**Key Business Logic**:
+- FULL OUTER JOIN on DATE + CHANNEL + CAMPAIGN (case-insensitive) — rows can have mobile-only, web-only, or both
+- Blended efficiency metrics (CPA/ROAS) are NULL when spend is 0
+- All revenue uses time-decay model (recommended)
+
+---
+
 ## 6. Seeds
 
 ### `country_codes`
@@ -1552,7 +1735,7 @@ These models are pure partitions of the monolithic `IOS_EVENTS` and `ANDROID_EVE
 | **iOS IDFA: ~7.37% availability** | `int_mta__user_journey`, all `mta__*` marts | Only ~7% of iOS installs have touchpoint matching. MTA understates iOS coverage. | No full fix possible under Apple ATT framework. Consider probabilistic matching as supplement. |
 | **Self-attributing networks (SANs): 0% touchpoint data** | `int_mta__user_journey`, all `mta__*` marts | Meta, Google, Apple Search Ads, and TikTok share no touchpoint data with Adjust. These networks (majority of spend) cannot be MTA-attributed. | Inherent limitation of the SAN model. MMM is the recommended alternative for these networks. |
 | **Device mapping never deployed** | `int_adjust_amplitude__device_mapping`, `int_ltv__device_revenue`, `mta__campaign_ltv` | Device-level LTV attribution is non-functional in production. | Requires Android SDK fix above plus production deployment. |
-| **No Facebook source YAML** | All `v_stg_facebook_*` models | Database/schema name changes require manual SQL updates across all Facebook staging models. | Add `_sources.yml` for FIVETRAN_DATABASE.FACEBOOK_ADS. |
+| ~~**No Facebook source YAML**~~ | All `v_stg_facebook_*` models | ~~Database/schema name changes require manual SQL updates.~~ | ✅ **Resolved** — `_facebook__sources.yml` added; all 7 FB models now use `{{ source() }}` refs. |
 | **Retention uses ROUNDSTARTED, not session open** | `int_user_cohort__metrics`, `mart_ltv__cohort_summary` | Users who opened the app but did not start a round are not counted as retained. Retention rates may be understated. | Deliberate tradeoff for compute cost. Revisit if Amplitude compute costs allow. |
 | **Desktop spend lacks platform dimension in Fivetran** | `int_spend__unified`, `mmm__daily_channel_summary` | Facebook and Google Fivetran data does not carry a PLATFORM column. Desktop platform is inferred from campaign name keywords or assumed. | Enforce platform naming convention in campaign names; or use Fivetran's platform breakdown if available. |
 | **Adjust API revenue uses last-touch attribution** | `stg_adjust__report_daily`, `mart_exec_summary`, all API-revenue models | Revenue in the Adjust API report is attributed to the last-touch channel only — multi-touch revenue distribution is not reflected. | MMM provides a channel-weighted revenue view. MTA revenue allocation in `mta__campaign_performance` addresses this for covered traffic. |
