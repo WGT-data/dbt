@@ -1,0 +1,121 @@
+version: 2
+
+models:
+  - name: mart_skan__campaign_performance
+    description: |
+      Standalone SKAN campaign performance mart joining SKAdNetwork postback data
+      with Adjust API spend data. Provides iOS SKAN-specific metrics including
+      conversion value distributions, fidelity types, and win rates.
+
+      Previously SKAN data was only available embedded in mart_exec_summary.
+      This model surfaces the full SKAN signal for iOS campaign optimization.
+
+      SKAN Limitations:
+      - No device identifiers — cannot join to individual users or revenue
+      - SKAN 3.0: campaign-level only (no adgroup/creative)
+      - SANs (Meta, Google): campaign names don't match Adjust spend data,
+        so they aggregate to partner/date level with campaign = '__none__'
+      - Country inferred from campaign name patterns (iOS_US_, WGT_AU_, etc.)
+
+      Grain: AD_PARTNER + CAMPAIGN_NAME + INSTALL_DATE + COUNTRY
+    columns:
+      - name: INSTALL_DATE
+        description: SKAN install date (from SK_TS timestamp)
+      - name: AD_PARTNER
+        description: Standardized partner name (Meta, Google, AppLovin, etc.)
+      - name: CAMPAIGN_NAME
+        description: Campaign name from SKAN postback (cleaned of trailing IDs). '__none__' for SANs.
+      - name: COUNTRY
+        description: Country inferred from campaign name patterns. 'unknown' when not extractable.
+      - name: COST
+        description: iOS ad spend from Adjust API
+      - name: SKAN_NEW_INSTALLS
+        description: SKAN new install count (excludes redownloads)
+      - name: SKAN_CPI
+        description: Cost per SKAN new install
+      - name: WIN_RATE
+        description: Fraction of postbacks where this network won SKAN attribution
+      - name: AVG_CONVERSION_VALUE
+        description: Average SKAN conversion value (proxy for engagement quality)
+      - name: CV_COVERAGE_RATE
+        description: Fraction of installs that have a non-null conversion value
+      - name: STOREKIT_RENDERED_RATE
+        description: Fraction of installs that were StoreKit-rendered (high fidelity)
+      - name: VIEW_THROUGH_RATE
+        description: Fraction of installs that were view-through (low fidelity)
+
+  - name: mart_attribution__combined
+    description: |
+      Combined web + mobile multi-touch attribution view. Stacks mobile MTA
+      (app installs from mta__campaign_performance) and web MTA (registrations
+      from rpt__web_attribution) into a single table with aligned columns.
+
+      Use ACQUISITION_TYPE to filter: 'mobile_install' or 'web_registration'.
+
+      Both pipelines use the same 5 MTA models (last-touch, first-touch, linear,
+      time-decay with 3-day half-life, position-based). Conversions are NOT
+      deduplicated between web and mobile — a user counted in both pipelines
+      appears in both rows. This is intentional for channel-level analysis.
+
+      Spend is mobile-only (web spend not tracked in this pipeline).
+
+      Grain: DATE + ACQUISITION_TYPE + CHANNEL + CAMPAIGN + PLATFORM
+    columns:
+      - name: DATE
+        description: Install date (mobile) or session date (web)
+      - name: ACQUISITION_TYPE
+        description: "'mobile_install' or 'web_registration'"
+      - name: CHANNEL
+        description: AD_PARTNER for mobile, TRAFFIC_SOURCE for web
+      - name: CAMPAIGN
+        description: Campaign name (mobile) or utm_campaign (web)
+      - name: PLATFORM
+        description: iOS/Android for mobile, 'Web' for web
+      - name: CONVERSIONS_TIME_DECAY
+        description: Attributed conversions using time-decay model (installs or registrations)
+      - name: D7_REVENUE_TIME_DECAY
+        description: 7-day revenue attributed via time-decay model
+      - name: TOTAL_REVENUE_TIME_DECAY
+        description: Lifetime revenue attributed via time-decay model
+      - name: CPI_RECOMMENDED
+        description: Cost per conversion using recommended (time-decay) model. Mobile only.
+      - name: TOTAL_ROAS_RECOMMENDED
+        description: Total ROAS using recommended (time-decay) model. Mobile only.
+
+  - name: mart_blended_performance
+    description: |
+      Blended web + mobile performance view aggregated to channel/campaign/date.
+      Combines mobile spend+installs alongside web sessions+registrations to enable
+      cross-platform channel comparison.
+
+      Unlike mart_attribution__combined (separate rows per acquisition type),
+      this model joins mobile and web at channel+campaign grain, providing
+      blended efficiency metrics (BLENDED_CPA, BLENDED_ROAS) that account
+      for web value driven by mobile ad spend.
+
+      Spend is mobile-only. Revenue is summed across both platforms.
+
+      Grain: DATE + CHANNEL + CAMPAIGN
+    columns:
+      - name: DATE
+        description: Event date
+      - name: CHANNEL
+        description: Unified channel name (AD_PARTNER for mobile, TRAFFIC_SOURCE for web)
+      - name: CAMPAIGN
+        description: Campaign name
+      - name: TOTAL_SPEND
+        description: Total ad spend (mobile only)
+      - name: TOTAL_CONVERSIONS
+        description: Mobile installs + web registrations (time-decay)
+      - name: TOTAL_REVENUE
+        description: Mobile + web lifetime revenue (time-decay)
+      - name: BLENDED_CPA
+        description: Total spend / (mobile installs + web registrations)
+      - name: BLENDED_D7_ROAS
+        description: Blended 7-day ROAS across mobile + web revenue
+      - name: BLENDED_TOTAL_ROAS
+        description: Blended lifetime ROAS across mobile + web revenue
+      - name: HAS_MOBILE_DATA
+        description: Whether this row has mobile install or spend data
+      - name: HAS_WEB_DATA
+        description: Whether this row has web session or registration data

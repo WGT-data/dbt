@@ -8,7 +8,7 @@ SELECT CAST(date AS DATE) AS Date
      , sum(SPEND) as SPEND
      , sum(IMPRESSIONS) AS IMPRESSIONS
      , sum(INLINE_LINK_CLICKS) as CLICKS
-FROM FIVETRAN_DATABASE.FACEBOOK_ADS.ADS_INSIGHTS ADI
+FROM {{ source('facebook_ads', 'ADS_INSIGHTS') }} ADI
 LEFT JOIN {{ ref('v_stg_facebook_accounts') }} ACC ON ACC.ID = ADI.ACCOUNT_ID
 LEFT JOIN {{ ref('v_stg_facebook_campaigns') }} CAM ON CAM.ID = ADI.CAMPAIGN_ID
 LEFT JOIN {{ ref('v_stg_facebook_adsets') }} ADT ON ADT.ID = ADI.ADSET_ID

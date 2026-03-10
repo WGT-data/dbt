@@ -17,7 +17,6 @@ SELECT
     , AD_PARTNER
     , NETWORK_NAME
     , CAMPAIGN_NAME
-    , CAMPAIGN_ID
     , PLATFORM
     , COUNTRY
 
@@ -39,7 +38,7 @@ SELECT
     , ATTRIBUTION_INSTALLS
 
     -- Revenue from Adjust API (event-date, additive)
-    , TOTAL_REVENUE
+    , ADJUST_ALL_REVENUE
     , TOTAL_PURCHASE_REVENUE
     , TOTAL_AD_REVENUE
 

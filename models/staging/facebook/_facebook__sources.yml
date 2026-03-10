@@ -1,0 +1,13 @@
+version: 2
+
+sources:
+  - name: facebook_ads
+    database: FIVETRAN_DATABASE
+    schema: FACEBOOK_ADS
+    tables:
+      - name: ACCOUNT_HISTORY
+      - name: AD_HISTORY
+      - name: AD_SET_HISTORY
+      - name: CAMPAIGN_HISTORY
+      - name: ADS_INSIGHTS
+      - name: ADS_INSIGHTS_ACTIONS
