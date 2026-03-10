@@ -69,8 +69,7 @@ models:
   - name: int_mmm__daily_channel_revenue
     description: >
       Daily revenue by channel and platform for MMM input.
-      Source: Adjust API daily report (stg_adjust__report_daily).
-      Uses pre-aggregated API data to avoid dependency on broken device mapping pipeline.
+      Sources: Adjust API (iOS/Android) + WGT.EVENTS.REVENUE via web MTA (Desktop).
       Revenue is event-date based (not install-cohort based) -- MMM handles lag statistically.
     columns:
       - name: DATE
@@ -78,12 +77,12 @@ models:
         data_tests:
           - not_null
       - name: PLATFORM
-        description: "iOS or Android"
+        description: "iOS, Android, or Desktop"
         data_tests:
           - not_null
           - accepted_values:
               arguments:
-                values: ['iOS', 'Android']
+                values: ['iOS', 'Android', 'Desktop']
       - name: CHANNEL
         description: "Standardized ad partner name via network_mapping seed"
         data_tests:

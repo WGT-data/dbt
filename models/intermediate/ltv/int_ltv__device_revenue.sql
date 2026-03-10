@@ -56,13 +56,14 @@ WITH device_installs AS (
     {% endif %}
 )
 
--- Map devices to Amplitude user IDs
+-- Map devices to Amplitude user IDs (deduplicate to one user per device+platform)
 , device_mapping AS (
     SELECT
         ADJUST_DEVICE_ID
         , AMPLITUDE_USER_ID
         , PLATFORM
     FROM {{ ref('int_adjust_amplitude__device_mapping') }}
+    QUALIFY ROW_NUMBER() OVER (PARTITION BY ADJUST_DEVICE_ID, PLATFORM ORDER BY AMPLITUDE_USER_ID) = 1
 )
 
 -- Devices with user mapping
