@@ -25,7 +25,7 @@ SELECT DAY AS DATE
          ELSE OS_NAME
        END AS PLATFORM
      , CHANNEL
-     , NETWORK AS PARTNER_NAME
+     , TRIM(REGEXP_REPLACE(NETWORK, '\\s*\\([a-zA-Z0-9_ -]+\\)\\s*$', '')) AS PARTNER_NAME
      , STORE_TYPE
      , STORE_ID
      , CAMPAIGN
