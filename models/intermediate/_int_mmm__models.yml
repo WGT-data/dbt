@@ -4,7 +4,8 @@ models:
   - name: int_mmm__daily_channel_spend
     description: >
       Daily marketing spend aggregated by channel and platform for MMM input.
-      Source: Unified spend (Adjust API + Fivetran Facebook + Fivetran Google).
+      Source: Unified spend (Adjust API network-level + granular + Fivetran Facebook + Fivetran Google).
+      Non-Meta/Google channels use the network-level API endpoint for accurate totals.
     columns:
       - name: DATE
         description: Calendar date of spend
@@ -27,6 +28,16 @@ models:
         description: Total ad impressions
       - name: CLICKS
         description: Total ad clicks
+      - name: PAID_INSTALLS
+        description: Paid install count from network-level API (NULL for Fivetran/granular sources)
+      - name: PAID_CLICKS
+        description: Paid click count from network-level API (NULL for Fivetran/granular sources)
+      - name: PAID_IMPRESSIONS
+        description: Paid impression count from network-level API (NULL for Fivetran/granular sources)
+      - name: SESSIONS
+        description: Session count from network-level API (NULL for Fivetran/granular sources)
+      - name: REATTRIBUTIONS
+        description: Reattribution count from network-level API (NULL for Fivetran/granular sources)
     data_tests:
       - dbt_utils.unique_combination_of_columns:
           arguments:
@@ -95,6 +106,66 @@ models:
         description: "Ad-based revenue (rewarded video, interstitials, etc.)"
       - name: API_INSTALLS
         description: "Install count from API (for cross-check with S3 installs)"
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - DATE
+              - PLATFORM
+              - CHANNEL
+
+  - name: int_mmm__daily_channel_skan
+    description: >
+      Daily SKAN (SKAdNetwork) metrics aggregated by channel for MMM input.
+      iOS only — provides aggregate install counts and conversion value distributions
+      for users attributed via Apple's privacy-preserving framework.
+      SKAN installs overlap with device-level installs and should NOT be summed together.
+    columns:
+      - name: DATE
+        description: Install date from SKAN postbacks
+        data_tests:
+          - not_null
+      - name: PLATFORM
+        description: "Always 'iOS' (SKAN is iOS-only)"
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['iOS']
+      - name: CHANNEL
+        description: "Standardized ad partner name from SKAN postback data"
+        data_tests:
+          - not_null
+      - name: SKAN_INSTALLS
+        description: Total SKAN-attributed install count
+      - name: SKAN_NEW_INSTALLS
+        description: New installs (not redownloads)
+      - name: SKAN_REDOWNLOADS
+        description: Redownload count
+      - name: SKAN_AVG_CV
+        description: Average conversion value across postbacks
+      - name: SKAN_INSTALLS_WITH_CV
+        description: Installs that included a conversion value
+      - name: SKAN_CV_BUCKET_0
+        description: Installs with conversion value = 0
+      - name: SKAN_CV_BUCKET_1_10
+        description: Installs with conversion value 1-10
+      - name: SKAN_CV_BUCKET_11_20
+        description: Installs with conversion value 11-20
+      - name: SKAN_CV_BUCKET_21_40
+        description: Installs with conversion value 21-40
+      - name: SKAN_CV_BUCKET_41_63
+        description: Installs with conversion value 41-63
+      - name: SKAN_STOREKIT_RENDERED
+        description: Installs with StoreKit-rendered ad (fidelity type 1)
+      - name: SKAN_VIEW_THROUGH
+        description: View-through installs (fidelity type 0)
+      - name: SKAN_WINNING_POSTBACKS
+        description: Postbacks where this network won attribution
+      - name: SKAN_V3_COUNT
+        description: Installs attributed via SKAN v3
+      - name: SKAN_V4_COUNT
+        description: Installs attributed via SKAN v4
     data_tests:
       - dbt_utils.unique_combination_of_columns:
           arguments:

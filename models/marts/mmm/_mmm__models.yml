@@ -3,10 +3,10 @@ version: 2
 models:
   - name: mmm__daily_channel_summary
     description: >
-      Primary MMM input table combining daily spend, installs, and revenue
+      Primary MMM input table combining daily spend, installs, revenue, and SKAN
       at the DATE + PLATFORM + CHANNEL grain. Uses a date spine to ensure
       complete time series with no gaps (critical for MMM regression models).
-      Metrics are zero-filled for days without activity.
+      Metrics are zero-filled for days without activity. SKAN columns are iOS-only.
     data_tests:
       - dbt_utils.unique_combination_of_columns:
           arguments:
@@ -20,7 +20,7 @@ models:
         data_tests:
           - not_null
       - name: PLATFORM
-        description: "iOS, Android, or All (for spend sources without platform breakdown)"
+        description: "iOS, Android, Desktop, or All (for spend sources without platform breakdown)"
         data_tests:
           - not_null
           - accepted_values:
@@ -32,20 +32,74 @@ models:
           - not_null
       - name: SPEND
         description: "Marketing spend, 0 if no spend"
+      - name: IMPRESSIONS
+        description: "Ad impressions, 0 if none"
+      - name: CLICKS
+        description: "Ad clicks, 0 if none"
+      - name: PAID_INSTALLS
+        description: "Paid installs from network-level API, 0 if unavailable"
+      - name: PAID_CLICKS
+        description: "Paid clicks from network-level API, 0 if unavailable"
+      - name: PAID_IMPRESSIONS
+        description: "Paid impressions from network-level API, 0 if unavailable"
+      - name: SESSIONS
+        description: "Sessions from network-level API, 0 if unavailable"
+      - name: REATTRIBUTIONS
+        description: "Reattributions from network-level API, 0 if unavailable"
       - name: INSTALLS
-        description: "Device-level installs (from Adjust S3), 0 if no installs"
+        description: "Device-level installs (from Adjust S3/network API), 0 if no installs"
       - name: REVENUE
         description: "Adjust-reported revenue, 0 if no revenue"
+      - name: ALL_REVENUE
+        description: "Adjust all_revenue metric (includes all revenue types)"
+      - name: AD_REVENUE
+        description: "Ad-based revenue (rewarded video, interstitials, etc.)"
+      - name: INSTALLS_API
+        description: "Install count from granular API (for cross-check)"
+      - name: SKAN_INSTALLS
+        description: "SKAN-attributed installs (iOS only, overlaps with device-level INSTALLS)"
+      - name: SKAN_NEW_INSTALLS
+        description: "SKAN new installs (not redownloads, iOS only)"
+      - name: SKAN_REDOWNLOADS
+        description: "SKAN redownloads (iOS only)"
+      - name: SKAN_AVG_CV
+        description: "Average SKAN conversion value (iOS only, NULL if no data)"
+      - name: SKAN_INSTALLS_WITH_CV
+        description: "SKAN installs with conversion value (iOS only)"
+      - name: SKAN_CV_BUCKET_0
+        description: "SKAN installs with CV = 0"
+      - name: SKAN_CV_BUCKET_1_10
+        description: "SKAN installs with CV 1-10"
+      - name: SKAN_CV_BUCKET_11_20
+        description: "SKAN installs with CV 11-20"
+      - name: SKAN_CV_BUCKET_21_40
+        description: "SKAN installs with CV 21-40"
+      - name: SKAN_CV_BUCKET_41_63
+        description: "SKAN installs with CV 41-63"
+      - name: SKAN_STOREKIT_RENDERED
+        description: "SKAN StoreKit-rendered installs (fidelity 1, iOS only)"
+      - name: SKAN_VIEW_THROUGH
+        description: "SKAN view-through installs (fidelity 0, iOS only)"
+      - name: SKAN_WINNING_POSTBACKS
+        description: "SKAN winning postbacks (iOS only)"
+      - name: SKAN_V3_COUNT
+        description: "SKAN v3 installs (iOS only)"
+      - name: SKAN_V4_COUNT
+        description: "SKAN v4 installs (iOS only)"
       - name: CPI
         description: "Cost per install (SPEND / INSTALLS), NULL if no installs"
       - name: ROAS
         description: "Return on ad spend (REVENUE / SPEND), NULL if no spend"
+      - name: ALL_ROAS
+        description: "Return on ad spend using all_revenue, NULL if no spend"
       - name: HAS_SPEND_DATA
         description: "1 if spend data exists for this row, 0 if zero-filled"
       - name: HAS_INSTALL_DATA
         description: "1 if install data exists for this row, 0 if zero-filled"
       - name: HAS_REVENUE_DATA
         description: "1 if revenue data exists for this row, 0 if zero-filled"
+      - name: HAS_SKAN_DATA
+        description: "1 if SKAN data exists for this row, 0 if zero-filled"
 
   - name: mmm__weekly_channel_summary
     description: >
