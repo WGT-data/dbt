@@ -39,4 +39,6 @@ sources:
     schema: API_DATA
     tables:
       - name: REPORT_DAILY_RAW
-        description: Daily aggregated campaign performance data from Adjust API
+        description: Daily aggregated campaign performance data from Adjust API (17 dimensions - granular)
+      - name: REPORT_DAILY_NETWORK_RAW
+        description: Daily network-level install and spend totals from Adjust API (4 dimensions - accurate install counts)
