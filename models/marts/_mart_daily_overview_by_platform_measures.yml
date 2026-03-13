@@ -13,35 +13,35 @@ models:
       aggregate correctly across all slicer combinations.
 
       Fact table reference: mart_daily_overview_by_platform
-      Grain: One row per DATE / PLATFORM / COUNTRY
+      Grain: One row per DATE / PLATFORM
 
       ── DAX Measures ──────────────────────────────────────────────────
 
       -- SPEND --
-      Total Cost        = SUM(mart_daily_overview_by_platform[COST])
+      Total Spend       = SUM(mart_daily_overview_by_platform[SPEND])
       Total Impressions = SUM(mart_daily_overview_by_platform[IMPRESSIONS])
       Total Clicks      = SUM(mart_daily_overview_by_platform[CLICKS])
       Total Sessions    = SUM(mart_daily_overview_by_platform[SESSIONS])
 
       -- INSTALLS --
-      Adjust Installs = SUM(mart_daily_overview_by_platform[ADJUST_INSTALLS])
+      Total Installs  = SUM(mart_daily_overview_by_platform[INSTALLS])
       Paid Installs   = SUM(mart_daily_overview_by_platform[PAID_INSTALLS])
 
       -- EFFICIENCY --
-      CPM                  = DIVIDE([Total Cost], [Total Impressions], BLANK()) * 1000
+      CPM                  = DIVIDE([Total Spend], [Total Impressions], BLANK()) * 1000
       CTR                  = DIVIDE([Total Clicks], [Total Impressions], BLANK())
-      CPI                  = DIVIDE([Total Cost], [Adjust Installs], BLANK())
-      Cost Per Paid Install = DIVIDE([Total Cost], [Paid Installs], BLANK())
+      CPI                  = DIVIDE([Total Spend], [Total Installs], BLANK())
+      Cost Per Paid Install = DIVIDE([Total Spend], [Paid Installs], BLANK())
 
       -- REVENUE --
-      Total Revenue    = SUM(mart_daily_overview_by_platform[TOTAL_REVENUE])
+      Total Revenue    = SUM(mart_daily_overview_by_platform[ALL_PLATFORM_REVENUE])
       Purchase Revenue = SUM(mart_daily_overview_by_platform[PURCHASE_REVENUE])
       Ad Revenue       = SUM(mart_daily_overview_by_platform[AD_REVENUE])
 
       -- ROAS --
-      Total ROAS    = DIVIDE([Total Revenue], [Total Cost], BLANK())
-      Purchase ROAS = DIVIDE([Purchase Revenue], [Total Cost], BLANK())
-      Ad ROAS       = DIVIDE([Ad Revenue], [Total Cost], BLANK())
+      Total ROAS    = DIVIDE([Total Revenue], [Total Spend], BLANK())
+      Purchase ROAS = DIVIDE([Purchase Revenue], [Total Spend], BLANK())
+      Ad ROAS       = DIVIDE([Ad Revenue], [Total Spend], BLANK())
 
       -- USER METRICS --
       Revenue Events  = SUM(mart_daily_overview_by_platform[REVENUE_EVENTS])

@@ -10,7 +10,7 @@
 -- recalculate ratios (CPI, ROAS, ARPU, etc.) from additive base metrics.
 --
 -- Fact table reference: mart_daily_overview_by_platform
--- Grain: One row per DATE / PLATFORM / COUNTRY
+-- Grain: One row per DATE / PLATFORM
 
 {{ config(
     materialized='table',

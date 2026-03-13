@@ -1,83 +1,60 @@
 -- mart_daily_overview_by_platform.sql
--- Unattributed daily business overview by Date, Platform, Country
+-- Unattributed daily business overview by Date + Platform
 --
 -- PURPOSE: Top-line daily metrics combining spend data with
 -- WGT.EVENTS revenue data — NO attribution join required. Shows the
 -- complete revenue picture across all users regardless of device mapping.
 --
--- SPEND SOURCES:
---   Mobile (iOS/Android): stg_adjust__report_daily (Adjust API)
---   Desktop: Fivetran Facebook + Google Ads (country-level)
+-- SPEND SOURCE: int_spend__unified (deduped across Fivetran + Adjust API)
+-- INSTALLS SOURCE: stg_adjust__report_daily_network (accurate network-level counts)
 -- REVENUE SOURCE: WGT.EVENTS.REVENUE (Amplitude/game events)
 --
--- Grain: One row per DATE / PLATFORM / COUNTRY
+-- Grain: One row per DATE / PLATFORM
 
 {{ config(
     materialized='incremental',
-    unique_key=['DATE', 'PLATFORM', 'COUNTRY'],
+    unique_key=['DATE', 'PLATFORM'],
     incremental_strategy='merge',
     on_schema_change='append_new_columns',
     tags=['mart', 'business', 'overview']
 ) }}
 
 -- =============================================
--- SPEND METRICS (from Adjust API)
+-- SPEND METRICS (from int_spend__unified)
 -- =============================================
 WITH spend_daily AS (
     SELECT
         DATE
         , PLATFORM
-        , COALESCE(COUNTRY, '__none__') AS COUNTRY
-        , SUM(NETWORK_COST) AS COST
+        , SUM(SPEND) AS SPEND
         , SUM(IMPRESSIONS) AS IMPRESSIONS
         , SUM(CLICKS) AS CLICKS
-        , SUM(INSTALLS) AS ADJUST_INSTALLS
-        , SUM(PAID_INSTALLS) AS PAID_INSTALLS
-        , SUM(SESSIONS) AS SESSIONS
-    FROM {{ ref('stg_adjust__report_daily') }}
+    FROM {{ ref('int_spend__unified') }}
     WHERE DATE IS NOT NULL
+      AND PLATFORM IS NOT NULL
     {% if is_incremental() %}
         AND DATE >= DATEADD(day, -3, (SELECT MAX(DATE) FROM {{ this }}))
     {% endif %}
-    GROUP BY 1, 2, 3
+    GROUP BY 1, 2
 )
 
 -- =============================================
--- WEB/DESKTOP SPEND (from Fivetran Facebook + Google Ads)
+-- INSTALL METRICS (from network-level Adjust API)
 -- =============================================
-, web_spend_daily AS (
+, installs_daily AS (
     SELECT
         DATE
-        , 'Desktop' AS PLATFORM
-        , COALESCE(COUNTRY, '__none__') AS COUNTRY
-        , SUM(SPEND) AS COST
-        , SUM(IMPRESSIONS) AS IMPRESSIONS
-        , SUM(CLICKS) AS CLICKS
-        , 0 AS ADJUST_INSTALLS
-        , 0 AS PAID_INSTALLS
-        , 0 AS SESSIONS
-    FROM (
-        SELECT DATE, COUNTRY, SPEND, IMPRESSIONS, CLICKS
-        FROM {{ ref('v_stg_facebook_spend') }}
-
-        UNION ALL
-
-        SELECT DATE, COUNTRY, SPEND, IMPRESSIONS, CLICKS
-        FROM {{ ref('v_stg_google_ads__country_spend') }}
-        WHERE PLATFORM = 'Desktop'
-    ) web
+        , PLATFORM
+        , SUM(INSTALLS) AS INSTALLS
+        , SUM(PAID_INSTALLS) AS PAID_INSTALLS
+        , SUM(SESSIONS) AS SESSIONS
+        , SUM(REATTRIBUTIONS) AS REATTRIBUTIONS
+    FROM {{ ref('stg_adjust__report_daily_network') }}
     WHERE DATE IS NOT NULL
     {% if is_incremental() %}
         AND DATE >= DATEADD(day, -3, (SELECT MAX(DATE) FROM {{ this }}))
     {% endif %}
-    GROUP BY 1, 2, 3
-)
-
--- Combine mobile + desktop spend
-, all_spend_daily AS (
-    SELECT * FROM spend_daily
-    UNION ALL
-    SELECT * FROM web_spend_daily
+    GROUP BY 1, 2
 )
 
 -- =============================================
@@ -87,7 +64,6 @@ WITH spend_daily AS (
     SELECT
         DATE(EVENTTIME) AS DATE
         , PLATFORM
-        , COALESCE(COUNTRY, '__none__') AS COUNTRY
         , COUNT(*) AS REVENUE_EVENTS
         , COUNT(DISTINCT USERID) AS REVENUE_USERS
         , SUM(COALESCE(REVENUE, 0)) AS ALL_PLATFORM_REVENUE
@@ -100,7 +76,7 @@ WITH spend_daily AS (
     {% if is_incremental() %}
         AND EVENTTIME >= DATEADD(day, -3, (SELECT MAX(DATE) FROM {{ this }}))
     {% endif %}
-    GROUP BY 1, 2, 3
+    GROUP BY 1, 2
 )
 
 -- =============================================
@@ -108,17 +84,19 @@ WITH spend_daily AS (
 -- =============================================
 , combined AS (
     SELECT
-        COALESCE(s.DATE, r.DATE) AS DATE
-        , COALESCE(s.PLATFORM, r.PLATFORM) AS PLATFORM
-        , COALESCE(s.COUNTRY, r.COUNTRY) AS COUNTRY
+        COALESCE(s.DATE, i.DATE, r.DATE) AS DATE
+        , COALESCE(s.PLATFORM, i.PLATFORM, r.PLATFORM) AS PLATFORM
 
         -- Spend metrics
-        , COALESCE(s.COST, 0) AS COST
+        , COALESCE(s.SPEND, 0) AS SPEND
         , COALESCE(s.IMPRESSIONS, 0) AS IMPRESSIONS
         , COALESCE(s.CLICKS, 0) AS CLICKS
-        , COALESCE(s.ADJUST_INSTALLS, 0) AS ADJUST_INSTALLS
-        , COALESCE(s.PAID_INSTALLS, 0) AS PAID_INSTALLS
-        , COALESCE(s.SESSIONS, 0) AS SESSIONS
+
+        -- Install metrics (network-level, accurate)
+        , COALESCE(i.INSTALLS, 0) AS INSTALLS
+        , COALESCE(i.PAID_INSTALLS, 0) AS PAID_INSTALLS
+        , COALESCE(i.SESSIONS, 0) AS SESSIONS
+        , COALESCE(i.REATTRIBUTIONS, 0) AS REATTRIBUTIONS
 
         -- Revenue metrics
         , COALESCE(r.ALL_PLATFORM_REVENUE, 0) AS ALL_PLATFORM_REVENUE
@@ -129,25 +107,29 @@ WITH spend_daily AS (
         , COALESCE(r.PURCHASERS, 0) AS PURCHASERS
         , COALESCE(r.AD_REVENUE_USERS, 0) AS AD_REVENUE_USERS
 
-    FROM all_spend_daily s
+    FROM spend_daily s
+    FULL OUTER JOIN installs_daily i
+        ON s.DATE = i.DATE
+        AND s.PLATFORM = i.PLATFORM
     FULL OUTER JOIN revenue_daily r
-        ON s.DATE = r.DATE
-        AND LOWER(s.PLATFORM) = LOWER(r.PLATFORM)
-        AND LOWER(s.COUNTRY) = LOWER(r.COUNTRY)
+        ON COALESCE(s.DATE, i.DATE) = r.DATE
+        AND COALESCE(s.PLATFORM, i.PLATFORM) = r.PLATFORM
 )
 
 SELECT
     DATE
     , PLATFORM
-    , COUNTRY
 
     -- Spend
-    , COST
+    , SPEND
     , IMPRESSIONS
     , CLICKS
-    , ADJUST_INSTALLS
     , PAID_INSTALLS
     , SESSIONS
+    , REATTRIBUTIONS
+
+    -- Installs
+    , INSTALLS
 
     -- Revenue
     , ALL_PLATFORM_REVENUE
