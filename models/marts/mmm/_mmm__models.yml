@@ -25,7 +25,7 @@ models:
           - not_null
           - accepted_values:
               arguments:
-                values: ['iOS', 'Android', 'Desktop', 'All']
+                values: ['iOS', 'Android', 'Desktop', 'All', 'android-tv', 'fire-tv', 'windows']
       - name: CHANNEL
         description: "Standardized ad partner name (Meta, Google, TikTok, etc.)"
         data_tests:
@@ -124,7 +124,7 @@ models:
           - not_null
           - accepted_values:
               arguments:
-                values: ['iOS', 'Android', 'Desktop', 'All']
+                values: ['iOS', 'Android', 'Desktop', 'All', 'android-tv', 'fire-tv', 'windows']
       - name: CHANNEL
         description: "Standardized ad partner name"
         data_tests:

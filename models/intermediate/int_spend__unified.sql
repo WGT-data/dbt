@@ -26,7 +26,7 @@ WITH fb_spend AS (
         , 'Meta' AS CHANNEL
         , AD_ID::VARCHAR AS CAMPAIGN_ID
         , CAMPAIGN AS CAMPAIGN_NAME
-        , NULL AS PLATFORM
+        , 'Desktop' AS PLATFORM
         , SPEND
         , IMPRESSIONS
         , CLICKS
@@ -45,7 +45,7 @@ google_spend AS (
         , 'Google' AS CHANNEL
         , CAMPAIGN_ID::VARCHAR AS CAMPAIGN_ID
         , CAMPAIGN_NAME
-        , NULL AS PLATFORM
+        , 'Desktop' AS PLATFORM
         , SPEND
         , IMPRESSIONS
         , CLICKS

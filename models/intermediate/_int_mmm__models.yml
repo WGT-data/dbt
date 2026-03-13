@@ -12,12 +12,12 @@ models:
         data_tests:
           - not_null
       - name: PLATFORM
-        description: "iOS, Android, or All (for sources without platform breakdown)"
+        description: "iOS, Android, Desktop, or All (for sources without platform breakdown)"
         data_tests:
           - not_null
           - accepted_values:
               arguments:
-                values: ['iOS', 'Android', 'All']
+                values: ['iOS', 'Android', 'Desktop', 'All']
       - name: CHANNEL
         description: "Standardized ad partner name (Meta, Google, TikTok, etc.)"
         data_tests:

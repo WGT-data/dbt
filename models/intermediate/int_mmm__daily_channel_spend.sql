@@ -18,7 +18,7 @@
 WITH spend_with_channel AS (
     SELECT
         DATE,
-        COALESCE(PLATFORM, 'All') AS PLATFORM,
+        PLATFORM,
         CHANNEL,
         SUM(SPEND) AS SPEND,
         SUM(IMPRESSIONS) AS IMPRESSIONS,
